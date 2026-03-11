@@ -1,0 +1,6 @@
+Bootstrap: docker
+From: fedora:43
+
+%post
+    dnf update -y
+    dnf install -y git

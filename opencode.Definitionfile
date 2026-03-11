@@ -1,0 +1,8 @@
+Bootstrap: localimage
+From: fedora.sif
+
+%post
+    dnf install -y nodejs
+    npm i -g opencode-ai
+    mkdir /work
+    cd /work

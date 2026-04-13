@@ -1,0 +1,11 @@
+[users."den-antares"]
+keys = [
+    # scratch.pem
+    { id = 'Nn20CDS45AgdiAN0b_v7SQ', public_key = 'pQECAyYgASFYIJKFV02ITvT78nDfsyL4EVOdrAQ0u_RV-9FDk9XaZ8IzIlggi-SbL2sjUBV_rNRpmCp-pksfaAUjB91_Vbu5_J6ffys' }
+]
+
+[users."初音ミク"]
+keys = []
+
+[users."Слава Україні!"]
+keys = []

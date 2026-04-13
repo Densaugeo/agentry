@@ -1,0 +1,9 @@
+Bootstrap: localimage
+From: apptainers/opencode-partial.sif
+
+%files
+    requirements.txt /requirements.txt
+
+%post
+    python -m pip install -r /requirements.txt
+    python -m pip install fido2 cryptography

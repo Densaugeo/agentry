@@ -1,0 +1,46 @@
+[project]
+name = "libden"
+version = "0.0.0"
+description = "Den Antares' personal Python library"
+readme = "README.md"
+#license = "NONE"
+license = "LicenseRef-Proprietary"
+classifiers=[
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+requires-python = ">= 3.14"
+
+[project.urls]
+Repository = "https://github.com/Densaugeo/libden"
+
+[project.scripts]
+# Add scripts for passkey tools, ffvrc, etc.
+
+[project.optional-dependencies]
+pk = [
+  # New CLI tool
+  "fido2",
+  "cryptography",
+  
+  # Existing pk server
+  "fastapi[standard] >= 0.112.0",
+  "fastapi_utils[all] >= 0.8.0",
+  "setproctitle >= 1.3.3",
+  "webauthn >= 2.2.0"
+]
+
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+# Pytest's cache folder doesn't play well with the permission issues of
+# running from multiple users
+addopts = "-p no:cacheprovider"
+markers = [
+    "quick: Quick tests run on every commit",
+    "release: Full release tests run before publishing",
+    "pypi: Tests run against downloaded PyPI package",
+    "fixture_args: Pass arguments through to the server fixture"
+]

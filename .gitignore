@@ -1,2 +1,10 @@
-*.sif
+__pycache__
 local-share-opencode
+test/temp
+*.sif
+*.pem
+passkey-authentication.json
+passkey-authentication-full.json
+passkey-challenge.json
+passkey-registration.json
+passkey-registration-full.json

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1">
+
+<title>Tir na Nog - Login</title>
+</head>
+
+<body>
+<button id="register-key">Register new key</button>
+<button id="login">Login</button>
+<button id="logout">Logout</button>
+<button id="logout-all">Logout all devices</button>
+<p id="registration-message"></p>
+</body>
+
+<script type="module">
+
+/////////////
+// Helpers //
+/////////////
+
+window.buffer_to_wb64 = buffer => {
+  return new Uint8Array(buffer).toBase64()
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+window.wb64_to_u8_array = wb64 => {
+  return Uint8Array.fromBase64(wb64.replace(/-/g, '+').replace(/_/g, '/'))
+}
+
+window.fetch_text = async (url, options) => {
+  if(options?.json) {
+    if(!options.headers) options.headers = {}
+    options.headers['Content-Type'] = 'application/json'
+    options.body = JSON.stringify(options.json)
+  }
+  
+  const res = await fetch(url, options)
+  if(!res.ok) throw new Error(`${res.status}: ${await res.text()}`)
+  return await res.text()
+}
+
+window.fetch_json = async (url, options) => {
+  if(options?.json) {
+    if(!options.headers) options.headers = {}
+    options.headers['Content-Type'] = 'application/json'
+    options.body = JSON.stringify(options.json)
+  }
+  
+  const res = await fetch(url, options)
+  if(!res.ok) throw new Error(`${res.status}: ${await res.text()}`)
+  return await res.json()
+}
+
+////////////////////
+// Auth Functions //
+////////////////////
+
+const register_key = async () => {
+  const challenge = await fetch_json('/api/challenge', {
+    method: 'POST',
+    json: {
+      username: 'den-antares',
+    },
+  })
+  
+  const domain = location.hostname === 'localhost' ? 'localhost' :
+    'den-antares.com'
+  
+  const credential = await navigator.credentials.create({
+    publicKey: {
+      challenge: wb64_to_u8_array(challenge.challenge),
+      rp: { id: domain, name: domain },
+      rpId: domain,
+      // The values in the 'user' field are never used later, they don't matter
+      // but will throw an error if left empty
+      user: {
+        id: new Uint8Array([0x20]),
+        name: ' ',
+        displayName: ' ',
+      },
+      pubKeyCredParams: [
+        // Chrome logs a warning unless both of these algorithms are specified
+        { type: 'public-key', alg: -7 },
+        { type: 'public-key', alg: -257 },
+      ],
+    },
+  })
+  console.log(credential)
+  
+  const registration = await fetch_json('/api/register-key', {
+    method: 'POST',
+    json: {
+      id: credential.id,
+      rawId: buffer_to_wb64(credential.rawId),
+      response: {
+        attestationObject: buffer_to_wb64(credential.response.attestationObject),
+        clientDataJSON: buffer_to_wb64(credential.response.clientDataJSON),
+      },
+      type: credential.type,
+      
+      // rpId and origin aren't part of the credential, but are needed because
+      // pywebauthn checks them. They can't be hardcoded because they'll differ
+      // between test and production, or even between different production hosts
+      rpId: domain,
+      origin: location.origin,
+      
+      username: 'den-antares',
+    },
+  })
+  console.log(registration)
+  
+  const snippet =
+`    RegisteredKey( # ${domain}
+        id='${registration.id}',
+        public_key='${registration.public_key}',
+    ),
+`
+  
+  navigator.clipboard.writeText(snippet)
+  
+  document.getElementById('registration-message').innerHTML = `
+    To complete registration, add the following entry to registered_keys (copied
+    to clipboard):
+    <pre>${snippet}</pre>
+  `
+}
+
+const login = async () => {
+  const challenge = await fetch_json('/api/challenge', {
+    method: 'POST',
+    json: {
+      username: 'den-antares',
+    }
+  })
+  
+  const domain = location.hostname === 'localhost' ? 'localhost' :
+    'den-antares.com'
+  
+  const credential = await navigator.credentials.get({
+    publicKey: {
+      challenge: wb64_to_u8_array(challenge.challenge),
+      // rp is the new way, rpId is the old way. Both must be supplied for auth
+      // to work in current browsers (as of 11 Aug 2024). How long until they
+      // change it again?
+      // Update 13 Mar 2026 - rpId is no longer required *on localhost*, so
+      // if removed it appears to work in testing, then fails in production
+      rp: { id: domain, name: domain },
+      rpId: domain,
+      allowCredentials: challenge.allowCredentials.map(v => { return {
+        type: 'public-key',
+        id: wb64_to_u8_array(v),
+      }}),
+    }
+  })
+  console.log(credential)
+  
+  await fetch_text('/api/login', {
+    method: 'POST',
+    // pywebauthn is designed to use a stringified PublicKeyCredential object.
+    // This works fine when the client runs in Firefox, but in Chrome running
+    // JSON.stringify(credential) returns '{}', so it has to be rebuilt with
+    // each important field explicitly reassigned. Maybe another security
+    // mechanism gone wrong?
+    json: {
+      id: credential.id,
+      rawId: buffer_to_wb64(credential.rawId),
+      response: {
+        authenticatorData: buffer_to_wb64(credential.response.authenticatorData),
+        clientDataJSON: buffer_to_wb64(credential.response.clientDataJSON),
+        signature: buffer_to_wb64(credential.response.signature),
+      },
+      type: credential.type,
+      
+      // rpId and origin aren't part of the credential, but are needed because
+      // pywebauthn checks them. They can't be hardcoded because they'll differ
+      // between test and production, or even between different production hosts
+      rpId: domain,
+      origin: location.origin,
+      
+      username: 'den-antares',
+    },
+  })
+}
+
+const logout = async () => {
+  await fetch_text('/api/logout', { method: 'POST' })
+}
+
+const logout_all = async () => {
+  await fetch_text('/api/logout-all', { method: 'POST' })
+}
+
+document.getElementById('register-key').addEventListener('click', register_key)
+document.getElementById('login'       ).addEventListener('click', login       )
+document.getElementById('logout'      ).addEventListener('click', logout      )
+document.getElementById('logout-all'  ).addEventListener('click', logout_all  )
+
+login()
+</script>
+</html>

@@ -17,6 +17,7 @@ Auth system
 - Postrelease test
 - Naming and such for CLI tool
 - Define expected origin + rpid in config file
+- Why do the automated tests and actual browser use require different origins?
 
 ## License
 

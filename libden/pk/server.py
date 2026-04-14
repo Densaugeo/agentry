@@ -28,6 +28,11 @@ challenge = None
 tokens = []
 
 @dataclasses.dataclass
+class Config:
+    rpid: str
+    origins: [str]
+
+@dataclasses.dataclass
 class RegisteredKey:
     id: str
     public_key: str
@@ -39,8 +44,10 @@ class User:
     challenge_mins_remaining: int = 0
     keys: list[RegisteredKey] = dataclasses.field(default_factory=list)
 
-with open(os.environ['LIBDEN_KEYLIST'], 'rb') as f:
+with open(os.environ['PKSERVER_TOML'], 'rb') as f:
     toml = tomllib.load(f)
+
+config = Config(**toml['config'])
 
 users: dict[str, User] = {}
 for user, data in toml['users'].items():
@@ -149,10 +156,6 @@ async def post_api_register_key(request: Request):
     except json.decoder.JSONDecodeError:
         raise HTTPException(400, 'Bad Request - Invalid JSON')
     
-    if body['rpId'] not in ['localhost', 'den-antares.com']:
-        raise HTTPException(403, 'Forbidden - This key is for '
-            f'"{body['rpId']}", not this site')
-    
     if 'username' not in body:
         raise HTTPException(400, 'Bad Request - No username')
     if body['username'] not in users:
@@ -166,8 +169,8 @@ async def post_api_register_key(request: Request):
         verified_registration = webauthn.verify_registration_response(
             credential=body,
             expected_challenge=user.challenge,
-            expected_rp_id=body['rpId'],
-            expected_origin=body['origin'],
+            expected_rp_id=config.rpid,
+            expected_origin=config.origins,
         )
     except webauthn.helpers.exceptions.InvalidRegistrationResponse as e:
         raise HTTPException(401, f'Unauthorized - {e}')
@@ -190,10 +193,6 @@ async def post_api_login(request: Request):
     except json.decoder.JSONDecodeError:
         raise HTTPException(400, 'Bad Request - Invalid JSON')
     
-    if body['rpId'] not in ['localhost', 'den-antares.com']:
-        raise HTTPException(403, 'Forbidden - This key is for '
-            f'`{body['rpId']}`, not this site')
-    
     if 'username' not in body:
         raise HTTPException(400, 'Bad Request - No username')
     if body['username'] not in users:
@@ -215,8 +214,8 @@ async def post_api_login(request: Request):
         verified_response = webauthn.verify_authentication_response(
             credential=body,
             expected_challenge=user.challenge,
-            expected_rp_id=body['rpId'],
-            expected_origin=body['origin'],
+            expected_rp_id=config.rpid,
+            expected_origin=config.origins,
             credential_public_key=public_key,
             # Sign count is required, but doesn't seem to do anything
             credential_current_sign_count=0,

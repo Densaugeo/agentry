@@ -1,3 +1,7 @@
+[config]
+rpid = "localhost"
+origins = ["localhost", "http://localhost:8000"]
+
 [users."den-antares"]
 keys = [
     # scratch.pem

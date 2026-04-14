@@ -102,12 +102,6 @@ const register_key = async () => {
       },
       type: credential.type,
       
-      // rpId and origin aren't part of the credential, but are needed because
-      // pywebauthn checks them. They can't be hardcoded because they'll differ
-      // between test and production, or even between different production hosts
-      rpId: domain,
-      origin: location.origin,
-      
       username: 'den-antares',
     },
   })
@@ -174,12 +168,6 @@ const login = async () => {
         signature: buffer_to_wb64(credential.response.signature),
       },
       type: credential.type,
-      
-      // rpId and origin aren't part of the credential, but are needed because
-      // pywebauthn checks them. They can't be hardcoded because they'll differ
-      // between test and production, or even between different production hosts
-      rpId: domain,
-      origin: location.origin,
       
       username: 'den-antares',
     },

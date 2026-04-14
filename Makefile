@@ -56,8 +56,7 @@ webauthn-test:
 	python -m uvicorn webauthn-test.app-fastapi:app --use-colors --reload
 
 dev-pk: apptainers/opencode.sif
-	# LIBDEN_KEYLIST=/repo/test/keys.toml
-	apptainer exec --env LIBDEN_KEYLIST=/repo/test/keys.toml \
+	apptainer exec --env PKSERVER_TOML=/repo/test/pkserver.toml \
 		--bind .:/repo:ro --cwd /repo $< \
 		python -m uvicorn libden.pk.server:app --use-colors \
 		--port 8000 --reload

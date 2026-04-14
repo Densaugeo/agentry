@@ -1,0 +1,3 @@
+[config]
+rpid = "localhost"
+origins = ["localhost", "http://localhost:8000"]

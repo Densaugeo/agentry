@@ -1,0 +1,21 @@
+[config]
+rpid = "localhost"
+origins = ["localhost", "http://localhost:8000"]
+
+[users."den-antares"]
+keys = [
+    # localhost - Yubkey 5 NFC
+    { id = 'iEz0VA4zLJeDDQqmDsFxwyPsni1lCVAAevIEMKrruFfoVPIf1FYZJ8usYDTkjqH_tB1CpVQg71LrTChfpoAU9w', public_key = 'pQECAyYgASFYIMX4QOP5gvEQH2nuQbjQ_1OoeiZ9mTWzN8LvLaSKVFjMIlggLot-HtQvjuTuUJGOQ-3o34QzlFvP8uu7EV66bTzIFs0' },
+    # localhost - Yubikey 5 NFC (Ars)
+    { id = 'am0MIQbgeDpimmSs5vTvfv30An1ELKiWtUEDDe9wXLdwiWElfTXd6cC3iiZVIsbQPwCpD7PzsOUyBx7TKfmBnQ', public_key = 'pQECAyYgASFYIENWdY0TOVzPWHdbDzejUQ402qe4st8lCGPsLTSnECqfIlgg-cOG2IEQPQW51Zh4VgyFtTZGeW9yKEnzJKeZRAwX60Q'},
+    # localhost - Yubikey 5 Nano
+    { id = 'WqHqs-1RUtuDpummLrFxnmQjRop_4x7JyTeaDwbF1HGDw96bbxDuoVZismqiKK2ylZSfEkiAn0ZNACQK3_zj3Q', public_key = 'pQECAyYgASFYIOZIpVC7JbRnKeFSvqeiP8WtymmjyFsCwY8A3tmbkzgEIlggNOhEmwyz7HwSpK84kyvf5BBoNKj42KZuT6BAugPPiug'},
+    # den-antares.com - Yubkey 5 NFC
+    { id = 'pDvWeA8ZfgXsqoNZeo12WScVhQNPo9gioAScFyXlfdOKqlJCHwSiMXoTtcsTv8d2nS6AYp4yJUXkVRDaRPwa2A', public_key = 'pQECAyYgASFYIAKteyStrylQok14QnfRPVNaBtrMX88dM1uSTFC5FOq4IlggkWZ_u3guarx7-5rSgXVzBp3tq7RoFe4FwpAOqWMSprM'},
+    # den-antares.com - Yubikey 5 NFC (Ars)
+    { id = '6Vbj8ydd2--owAKKJht0DVg_cTMoeitoIWb6jyJU2843y5fdfoQB0BrHbXhF2leaE1wp2TSZPRm0ouCsU0ZAQg', public_key = 'pQECAyYgASFYIPQBXXqMi4KLyf9YSe6BXRzA5k6NPkw2xnzfzl_MdMelIlggqHADqPonr9wPimc6vpb-maZBdift9nDYcLfHqaverL8'},
+    # den-antares.com - Yubikey 5 Nano
+    { id = 'tjoXP-WRKwOR4EUG6t2txazV9z5oXshuLPArHc4z17bSjnRG8TtWCskqSBHTqKOpTOAZTZJAJ3H9JO72zpzplA', public_key = 'pQECAyYgASFYIOMM69cfD8rb7q0SCTp85hYWU3rJBw5FFTdjUteBM9T1IlggXeOV2n0MEIovV_clxEwpVH5xkqPmiDW-aJRkINeR06s'},
+    # scratch.pem
+    { id = 'Nn20CDS45AgdiAN0b_v7SQ', public_key = 'pQECAyYgASFYIJKFV02ITvT78nDfsyL4EVOdrAQ0u_RV-9FDk9XaZ8IzIlggi-SbL2sjUBV_rNRpmCp-pksfaAUjB91_Vbu5_J6ffys' }
+]

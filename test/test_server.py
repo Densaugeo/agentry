@@ -18,7 +18,7 @@ def _get_server_scope(fixture_name, config):
 class Server:
     def __init__(self):
         self.port = 8000
-        self.keylist = 'keylist-test.toml'
+        self.toml = 'pkserver-test.toml'
         self.proc = None
     
     def start(self):
@@ -28,8 +28,8 @@ class Server:
         if self.port is not None:
             args += ['--port', str(self.port)]
         
-        if self.keylist is not None:
-            env['LIBDEN_KEYLIST'] = self.keylist
+        if self.toml is not None:
+            env['PKSERVER_TOML'] = self.toml
         
         self.proc = subprocess.Popen(args, env=env)
         
@@ -117,6 +117,10 @@ def test_registration_sunny_day(server):
     print(f'Server authorized registration with id `{res_json['id']}`')
     
     toml = f'''
+[config]
+rpid = "localhost"
+origins = ["localhost"]
+
 [users."{username}"]
 keys = [{{ id = '{res_json['id']}', public_key = '{res_json['public_key']}' }}]
 '''
@@ -124,7 +128,7 @@ keys = [{{ id = '{res_json['id']}', public_key = '{res_json['public_key']}' }}]
         f.write(toml)
     
     server.stop()
-    server.keylist = 'temp/test_registration_sunny_day.toml'
+    server.toml = 'temp/test_registration_sunny_day.toml'
     server.start()
     
     res = post('/api/challenge', json={ 'username': username })
@@ -195,8 +199,6 @@ private_key: pathlib.Path, origin: str) -> {}:
     
     res = json.loads(proc.stdout)
     warnings.warn('The CLI tool *really* should include these keys')
-    res['rpId'] = origin
-    res['origin'] = origin
     res['username'] = username
     
     return res
@@ -220,8 +222,6 @@ private_key: pathlib.Path, origin: str, credential_id: str) -> {}:
     
     res = json.loads(proc.stdout)
     warnings.warn('The CLI tool *really* should include these keys')
-    res['rpId'] = origin
-    res['origin'] = origin
     res['username'] = username
     
     return res

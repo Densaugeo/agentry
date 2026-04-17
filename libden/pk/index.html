@@ -108,10 +108,11 @@ const register_key = async () => {
   console.log(registration)
   
   const snippet =
-`    RegisteredKey( # ${domain}
-        id='${registration.id}',
-        public_key='${registration.public_key}',
-    ),
+`[users."den-antares"]
+keys = [  
+    # ${domain}
+    { id="${registration.id}", public_key='${registration.public_key}' },
+]
 `
   
   navigator.clipboard.writeText(snippet)

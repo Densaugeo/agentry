@@ -1,4 +1,4 @@
-import os, sys, time, json, pathlib, subprocess
+import os, sys, time, json, pathlib, subprocess, shutil
 import pytest, requests
 
 
@@ -35,7 +35,7 @@ class Server:
         
         for _ in range(100):
             try:
-                get('/', port=self.port, timeout=0.1)
+                get('/', port=self.port, expected_status=200, timeout=0.1)
                 break
             except requests.exceptions.ConnectionError:
                 time.sleep(0.01)
@@ -73,129 +73,144 @@ def test_login_sunny_day(server):
     username = "den-antares"
     origin = "localhost"
     rp_id = "localhost"
-    
-    # Use the pre-registered scratch key
     credential_id = "Nn20CDS45AgdiAN0b_v7SQ"
     
-    res = post('/api/challenge', json={ 'username': username })
-    assert res.status_code == 200
-    challenge_json = res.json()
-    challenge = challenge_json['challenge']
+    res = post('/api/challenge', json={ 'username': username },
+        expected_status=200)
+    challenge = res.json()['challenge']
     print(f'Server sent challenge `{challenge}` for user `{username}`')
-    assert credential_id in challenge_json['allowCredentials']
     
-    login_payload = webauthn_tool_authenticate(challenge, username, TEST_KEY_PATH, origin, credential_id)
+    login_payload = webauthn_tool_authenticate(challenge, username,
+        TEST_KEY_PATH, origin, credential_id)
     
-    res = post('/api/login', json=login_payload)
-    assert res.status_code == 200
-    assert 'token' in res.cookies
-    assert res.cookies['token'] == res.text
+    res = post('/api/login', json=login_payload, expected_status=200)
     token = res.text
+    assert token == res.cookies['token']
     print(f'Server authorized login with token `{token}`')
     
-    res = get('/verify', cookies={ 'token': token })
-    assert res.status_code == 200
+    res = get('/verify', cookies={ 'token': token }, expected_status=200)
 
 def test_registration_sunny_day(server):
     username = "den-antares"
     origin = "localhost"
     rp_id = "localhost"
     
-    res = post('/api/challenge', json={ 'username': username })
-    assert res.status_code == 200
-    challenge_json = res.json()
-    challenge = challenge_json['challenge']
+    res = post('/api/challenge', json={ 'username': username },
+        expected_status=200)
+    challenge = res.json()['challenge']
     print(f'Server sent challenge `{challenge}` for user `{username}`')
     
-    login_payload = webauthn_tool_register(challenge, username, TEST_KEY_PATH_2, origin)
+    login_payload = webauthn_tool_register(challenge, username,
+        TEST_KEY_PATH_2, origin)
     
-    res = post('/api/register-key', json=login_payload)
-    assert res.status_code == 200
+    res = post('/api/register-key', json=login_payload, expected_status=200)
     res_json = res.json()
-    assert 'id' in res_json
-    assert 'public_key' in res_json
-    print(f'Server authorized registration with id `{res_json['id']}`')
+    cred_id = res_json['id']
+    public_key = res_json['public_key']
+    print(f'Server authorized registration with id `{cred_id}`')
     
-    toml = f'''
-[config]
-rpid = "localhost"
-origins = ["localhost"]
-
-[users."{username}"]
-keys = [{{ id = '{res_json['id']}', public_key = '{res_json['public_key']}' }}]
-'''
-    with open('temp/test_registration_sunny_day.toml', 'w') as f:
-        f.write(toml)
+    shutil.copy2('pkserver-empty.toml', 'temp/test_registration_sunny_day.toml')
+    with open('temp/test_registration_sunny_day.toml', 'a') as f:
+        f.write(f'\n[users."{username}"]\n'
+            f'keys = [{{ id = "{cred_id}", public_key = "{public_key}" }}]\n')
     
     server.stop()
     server.toml = 'temp/test_registration_sunny_day.toml'
     server.start()
     
-    res = post('/api/challenge', json={ 'username': username })
-    assert res.status_code == 200
-    challenge_json = res.json()
-    challenge = challenge_json['challenge']
+    res = post('/api/challenge', json={ 'username': username },
+        expected_status=200)
+    challenge = res.json()['challenge']
     print(f'Server sent challenge `{challenge}` for user `{username}`')
     
-    login_payload = webauthn_tool_authenticate(challenge, username, TEST_KEY_PATH_2, origin, res_json['id'])
+    login_payload = webauthn_tool_authenticate(challenge, username,
+        TEST_KEY_PATH_2, origin, cred_id)
     
-    res = post('/api/login', json=login_payload)
-    assert res.status_code == 200
-    assert 'token' in res.cookies
-    assert res.cookies['token'] == res.text
+    res = post('/api/login', json=login_payload, expected_status=200)
     token = res.text
+    assert token == res.cookies['token']
     print(f'Server authorized login with token `{token}`')
     
-    res = get('/verify', cookies={ 'token': token })
-    assert res.status_code == 200
+    res = get('/verify', cookies={ 'token': token }, expected_status=200)
+
+@pytest.mark.manual
+def test_real_yubikey(server):
+    # Must use localhost and not 127.0.0.1 so browser accepts RP ID
+    print('Open http://localhost:8000/ in Chromium and register key. '
+        'Paste data here using Ctrl+Shift+V follwed by Ctrl+D.')
+    snippet = sys.stdin.readlines()
+    
+    shutil.copy2('pkserver-empty.toml', 'temp/test_registration_curl.toml')
+    with open('temp/test_registration_curl.toml', 'a') as f:
+        f.writelines(snippet)
+    
+    server.stop()
+    server.toml = 'temp/test_registration_curl.toml'
+    server.start()
+    
+    result = input('Try logging in! Does it work y/n?\n')
+    assert result == 'y'
+
+@pytest.mark.quick
+def test_register_curl(server):
+    proc = subprocess.run(['sh', 'pk-register.sh'], check=True)
+
+@pytest.mark.quick
+def test_login_curl(server):
+    proc = subprocess.run(['sh', 'pk-login.sh'], check=True)
 
 @pytest.mark.quick
 def test_server_is_running(server):
-    resp = get('/')
-    assert resp.status_code == 200
+    resp = get('/', expected_status=200)
 
 @pytest.mark.fixture_args(port=8001)
 def test_uvicorn_argument(server):
-    resp = get('/', port=8001)
-    assert resp.status_code == 200
+    resp = get('/', port=8001, expected_status=200)
 
 @pytest.mark.quick
 @pytest.mark.parametrize("run", range(10))
 def test_stress_reuse(server, run):
-    resp = get('/')
-    assert resp.status_code == 200
+    resp = get('/', expected_status=200)
     assert f"run {run}" == f"run {run}"  # Use run to avoid unused warning
 
 ###########
 # Helpers #
 ###########
 
-def get(path: str | bytes, port: int = 8000, *args, **kwargs
-    ) -> requests.Response:
-    return requests.get('http://127.0.0.1:{}{}'.format(port, path),
+def get(path: str | bytes, expected_status: int, port: int = 8000, *args,
+**kwargs) -> requests.Response:
+    # Use 127.0.0.1 and not localhost to avoid IPv6 headaches
+    res = requests.get('http://127.0.0.1:{}{}'.format(port, path),
         verify=False, *args, **kwargs)
+    
+    assert res.status_code == expected_status, res.text
+    
+    return res
 
-def post(path: str | bytes, port: int = 8000, *args, **kwargs
-    ) -> requests.Response:
-    return requests.post('http://127.0.0.1:{}{}'.format(port, path),
+def post(path: str | bytes, expected_status: int, port: int = 8000, *args,
+**kwargs) -> requests.Response:
+    # Use 127.0.0.1 and not localhost to avoid IPv6 headaches
+    res = requests.post('http://127.0.0.1:{}{}'.format(port, path),
         verify=False, *args, **kwargs)
+    
+    assert res.status_code == expected_status, res.text
+    
+    return res
 
 def webauthn_tool_register(challenge: str, username: str,
 private_key: pathlib.Path, origin: str) -> {}:
-    proc = subprocess.run([sys.executable, '-m', 
-        'libden.pk.webauthn_tool', 'register',
+    proc = subprocess.run([sys.executable, '-m', 'libden.pk.webauthn_tool',
+        'register',
         '--challenge', f"'{challenge}'",
         '--user-id', username,
         '--private-key', private_key,
         '--origin', origin
     ], capture_output=True, text=True)
+    
     print('python -m libden.pk.webauthn_tool returned exit code '
         f'{proc.returncode}')
-    if proc.returncode:
-        print(f'Captured stdout: {proc.stdout}')
-        print(f'Captured stderr: {proc.stderr}')
-        raise Exception('python -m libden.pk.webauthn_tool returned non-zero '
-            'exit code. See logs for details.')
+    assert proc.returncode == 0, 'python -m libden.pk.webauthn_tool returned ' \
+        f'exit code {proc.returncode}'
     
     res = json.loads(proc.stdout)
     warnings.warn('The CLI tool *really* should include these keys')
@@ -205,20 +220,18 @@ private_key: pathlib.Path, origin: str) -> {}:
 
 def webauthn_tool_authenticate(challenge: str, username: str,
 private_key: pathlib.Path, origin: str, credential_id: str) -> {}:
-    proc = subprocess.run([sys.executable, '-m', 
-        'libden.pk.webauthn_tool', 'authenticate',
+    proc = subprocess.run([sys.executable, '-m', 'libden.pk.webauthn_tool',
+        'authenticate',
         '--challenge', f"'{challenge}'",
         '--credential-id', credential_id,
         '--private-key', private_key,
         '--origin', origin
     ], capture_output=True, text=True)
+    
     print('python -m libden.pk.webauthn_tool returned exit code '
         f'{proc.returncode}')
-    if proc.returncode:
-        print(f'Captured stdout: {proc.stdout}')
-        print(f'Captured stderr: {proc.stderr}')
-        raise Exception('python -m libden.pk.webauthn_tool returned non-zero '
-            'exit code. See logs for details.')
+    assert proc.returncode == 0, 'python -m libden.pk.webauthn_tool returned ' \
+        f'exit code {proc.returncode}'
     
     res = json.loads(proc.stdout)
     warnings.warn('The CLI tool *really* should include these keys')

@@ -40,7 +40,6 @@ build-backend = "setuptools.build_meta"
 addopts = "-p no:cacheprovider"
 markers = [
     "quick: Quick tests run on every commit",
-    "release: Full release tests run before publishing",
-    "pypi: Tests run against downloaded PyPI package",
+    "manual: Tests which include manual components",
     "fixture_args: Pass arguments through to the server fixture"
 ]

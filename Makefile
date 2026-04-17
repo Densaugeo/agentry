@@ -28,9 +28,6 @@ opencode: apptainers/opencode.sif
 		--bind local-share-opencode:/home/agents/.local/share/opencode:rw \
 		--cwd /home/agents apptainers/opencode.sif
 
-fido2:
-	python -m flask --app fido2-test.server.server:app run
-
 require-opencode.sif:
 	@if [[ $$APPTAINER_CONTAINER != */opencode.sif ]]; then \
 		printf '\n!!!! Must be run inside opencode.sif !!!!\n\n' ;\
@@ -44,10 +41,11 @@ watch: test-watch
 			libden test; \
 	done
 test-watch: apptainers/opencode.sif require-opencode.sif passkey.pem passkey-2.pem
-	python -u -m pytest -v --tb short --capture no --server once -m quick
+	python -u -m pytest -v --tb short --server once -m quick --capture no
 test-prerelease: apptainers/opencode.sif require-opencode.sif passkey.pem passkey-2.pem
-	python -u -m pytest -v --tb short --server each
 	python -u -m pytest -v --tb short --server once -m quick
+	python -u -m pytest -v --tb short --server each -m "not manual"
+	python -u -m pytest -v --tb short --server each -m manual --capture no
 test-postrelease: apptainers/opencode.sif require-opencode.sif passkey.pem passkey-2.pem
 	python -u -m pytest -v --tb short --server each
 	python -u -m pytest -v --tb short --server once
@@ -82,40 +80,6 @@ clean:
 	rm -rf apptainers/*-tmp
 
 
-
-# Two scratches for trying out new CLI passkey tool (currently in agentry
-# project)
-scratch: passkey.pem
-	curl -X POST -ksS --fail-with-body http://localhost:8000/api/challenge \
-		--json '{"username": "den-antares"}' \
-		> passkey-challenge.json
-	python -m libden.pk.webauthn_tool register \
-		--challenge "$$(jq '.challenge' passkey-challenge.json)" \
-		--private-key passkey.pem \
-		--origin localhost --user-id den-antares \
-		> passkey-registration.json
-	jq '. += { rpId: "localhost", origin: "localhost", username: "den-antares" }' \
-		passkey-registration.json > passkey-registration-full.json
-	curl -X POST -ksS --fail-with-body \
-		http://localhost:8000/api/register-key \
-		--json @passkey-registration-full.json
-	@printf '\n'
-
-scratch-2: passkey.pem
-	curl -X POST -ksS --fail-with-body http://localhost:8000/api/challenge \
-		--json '{"username": "den-antares"}' \
-		> passkey-challenge.json
-	python libden.pk.webauthn_tool authenticate \
-		--challenge "$$(jq '.challenge' passkey-challenge.json)" \
-		--private-key passkey.pem \
-		--origin localhost --credential-id "Nn20CDS45AgdiAN0b_v7SQ" \
-		> passkey-authentication.json
-	jq '. += { rpId: "localhost", origin: "localhost", username: "den-antares" }' \
-		passkey-authentication.json > passkey-authentication-full.json
-	curl -X POST -ksS --fail-with-body \
-		http://localhost:8000/api/login \
-		--json @passkey-authentication-full.json
-	@printf '\n'
 
 passkey.pem:
 passkey-2.pem:

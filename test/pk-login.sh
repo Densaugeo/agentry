@@ -11,12 +11,9 @@ python -m libden.pk.webauthn_tool authenticate \
     --origin localhost --credential-id "Nn20CDS45AgdiAN0b_v7SQ" \
     > temp/curl-authentication.json
 
-jq '. += { username: "den-antares" }' \
-    temp/curl-authentication.json > temp/curl-authentication-full.json
-
 curl -X POST -sS --fail-with-body \
     http://localhost:8000/api/login \
-    --json @temp/curl-authentication-full.json \
+    --json @temp/curl-authentication.json \
     > temp/curl-token.txt
 
 curl -X GET -sS --fail-with-body \

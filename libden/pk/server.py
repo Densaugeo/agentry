@@ -7,25 +7,10 @@ from fastapi import FastAPI, HTTPException, Request, Cookie, Header
 import fastapi.responses as fr
 import webauthn
 
-MAX_LOGIN_ATTEMPTS = 3
+MAX_GLOBAL_CHALLENGES = 10
+MAX_USER_CHALLENGES = 3
 LOGIN_ATTEMPT_RECOVERY_TIME = 60 # mins
-CHALLENGE_EXPIRATION_TIME = 60 # mins
-
-#################
-# General Setup #
-#################
-
-setproctitle.setproctitle('tir-na-nog')
-
-__dir__ = pathlib.Path(__file__).parent
-
-logger = logging.getLogger('uvicorn')
-
-app = FastAPI()
-
-challenge = None
-
-tokens = []
+CHALLENGE_EXPIRATION_TIME = 5 # mins
 
 @dataclasses.dataclass
 class Config:
@@ -39,19 +24,39 @@ class RegisteredKey:
 
 @dataclasses.dataclass
 class User:
-    login_attempts_remaining: int = MAX_LOGIN_ATTEMPTS
-    challenge: bytes = b''
-    challenge_mins_remaining: int = 0
+    challenges_remaining: int = MAX_USER_CHALLENGES
     keys: list[RegisteredKey] = dataclasses.field(default_factory=list)
+
+@dataclasses.dataclass
+class Challenge:
+    username: str | None = None
+    mins_remaining: int = CHALLENGE_EXPIRATION_TIME
+
+#################
+# General Setup #
+#################
+
+setproctitle.setproctitle('tir-na-nog')
+
+logger = logging.getLogger('uvicorn')
+
+app = FastAPI()
 
 with open(os.environ['PKSERVER_TOML'], 'rb') as f:
     toml = tomllib.load(f)
 
 config = Config(**toml['config'])
 
+null_user = User(challenges_remaining=MAX_GLOBAL_CHALLENGES)
+
 users: dict[str, User] = {}
-for user, data in toml['users'].items():
-    users[user] = User(keys=[RegisteredKey(**key) for key in data['keys']])
+if 'users' in toml:
+    for user, data in toml['users'].items():
+        users[user] = User(keys=[RegisteredKey(**key) for key in data['keys']])
+
+challenges: dict[bytes, Challenge] = {}
+
+tokens = []
 
 error_template = '''<!DOCTYPE html>
 <html lang="en">
@@ -102,20 +107,28 @@ err: starlette.exceptions.HTTPException):
     
     return await fastapi.exception_handlers.http_exception_handler(request, err)
 
-@fastapi_utils.tasks.repeat_every(seconds=60)
+@app.on_event('startup')
+@fastapi_utils.tasks.repeat_every(seconds=60, raise_exceptions=True)
 def tick_challenges():
-    for username, user in users.items():
-        if user.challenge and not user.challenge_mins_remaining:
-            user.challenge = b''
-        
-        if user.challenge_mins_remaining:
-            user.challenge_mins_remaining -= 1
+    # Iterate over a copy of challenges.keys(), because keys will be removed
+    # during iteration
+    for key in list(challenges.keys()):
+        if challenges[key].mins_remaining == 0:
+            challenges.pop(key)
+    
+    for challenge in challenges.values():
+        challenge.mins_remaining -= 1
 
-@fastapi_utils.tasks.repeat_every(seconds=60*LOGIN_ATTEMPT_RECOVERY_TIME)
-def tick_login_attempts():
-    for username, user in users.items():
-        if user.login_attempts_remaining < MAX_LOGIN_ATTEMPTS:
-            user.login_attempts_remaining += 1
+@app.on_event('startup')
+@fastapi_utils.tasks.repeat_every(seconds=60*LOGIN_ATTEMPT_RECOVERY_TIME,
+    raise_exceptions=True)
+def tick_users():
+    if null_user.challenges_remaining < MAX_GLOBAL_CHALLENGES:
+        null_user.challenges_remaining += 1
+    
+    for user in users.values():
+        if user.challenges_remaining < MAX_USER_CHALLENGES:
+            user.challenges_remaining += 1
 
 #############
 # Endpoints #
@@ -131,21 +144,20 @@ class ChallengeBody(pydantic.BaseModel):
 
 @app.post('/api/challenge')
 async def post_api_challenge(body: ChallengeBody):
-    if body.username not in users:
-        raise HTTPException(403, 'Forbidden - No such user')
-    user = users[body.username]
+    username = body.username if body.username in users else None
+    user = null_user if username is None else users[body.username]
     
-    if not user.login_attempts_remaining:
+    if not user.challenges_remaining:
         raise HTTPException(429, 'Too Many Requests')
     
-    user.login_attempts_remaining -= 1
+    user.challenges_remaining -= 1
     # MDN states the challenge should be at least 16 bytes
     # https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API
-    user.challenge = os.urandom(16)
-    user.challenge_mins_remaining = CHALLENGE_EXPIRATION_TIME
+    new_challenge = os.urandom(16)
+    challenges[new_challenge] = Challenge(username=username)
     
     return fr.JSONResponse({
-        'challenge': wb64_from_bytes(user.challenge),
+        'challenge': wb64_from_bytes(new_challenge),
         'allowCredentials': [v.id for v in user.keys],
     })
 
@@ -156,29 +168,28 @@ async def post_api_register_key(request: Request):
     except json.decoder.JSONDecodeError:
         raise HTTPException(400, 'Bad Request - Invalid JSON')
     
-    if 'username' not in body:
-        raise HTTPException(400, 'Bad Request - No username')
-    if body['username'] not in users:
-        raise HTTPException(404, 'Not Found - No such user')
-    user = users[body['username']]
-    
-    if not user.challenge:
-        raise HTTPException(422, 'Unprocessable Content - Challenge not set')
+    challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
+        body['response']['clientDataJSON']))['challenge'])
+    if challenge_key not in challenges:
+        raise HTTPException(422, 'Unprocessable Content - Challenge not valid')
+    if challenges[challenge_key].username is None:
+        user = null_user
+    else:
+        user = users[challenges[challenge_key].username]
     
     try:
         verified_registration = webauthn.verify_registration_response(
             credential=body,
-            expected_challenge=user.challenge,
+            expected_challenge=challenge_key,
             expected_rp_id=config.rpid,
             expected_origin=config.origins,
         )
     except webauthn.helpers.exceptions.InvalidRegistrationResponse as e:
         raise HTTPException(401, f'Unauthorized - {e}')
     finally:
-        user.challenge = b''
-        user.challenge_mins_remaining = 0
+        challenges.pop(challenge_key)
     
-    user.login_attempts_remaining += 1
+    user.challenges_remaining += 1
     
     return fr.JSONResponse({
         'id': wb64_from_bytes(verified_registration.credential_id),
@@ -193,14 +204,12 @@ async def post_api_login(request: Request):
     except json.decoder.JSONDecodeError:
         raise HTTPException(400, 'Bad Request - Invalid JSON')
     
-    if 'username' not in body:
-        raise HTTPException(400, 'Bad Request - No username')
-    if body['username'] not in users:
-        raise HTTPException(404, 'Not Found - No such user')
-    user = users[body['username']]
-    
-    if not user.challenge:
-        raise HTTPException(422, 'Unprocessable Content - Challenge not set')
+    challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
+        body['response']['clientDataJSON']))['challenge'])
+    if challenge_key not in challenges \
+    or challenges[challenge_key].username is None:
+        raise HTTPException(422, 'Unprocessable Content - Challenge not valid')
+    user = users[challenges[challenge_key].username]
     
     for key in user.keys:
         if key.id == body['rawId']:
@@ -213,7 +222,7 @@ async def post_api_login(request: Request):
     try:
         verified_response = webauthn.verify_authentication_response(
             credential=body,
-            expected_challenge=user.challenge,
+            expected_challenge=challenge_key,
             expected_rp_id=config.rpid,
             expected_origin=config.origins,
             credential_public_key=public_key,
@@ -224,10 +233,9 @@ async def post_api_login(request: Request):
     except webauthn.helpers.exceptions.InvalidAuthenticationResponse as e:
         raise HTTPException(401, f'Unauthorized - {e}')
     finally:
-        user.challenge = b''
-        user.challenge_mins_remaining = 0
+        challenges.pop(challenge_key)
     
-    user.login_attempts_remaining += 1
+    user.challenges_remaining += 1
     token = wb64_from_bytes(os.urandom(32))
     tokens.append(token)
     res = fr.PlainTextResponse(token)

@@ -101,8 +101,6 @@ const register_key = async () => {
         clientDataJSON: buffer_to_wb64(credential.response.clientDataJSON),
       },
       type: credential.type,
-      
-      username: 'den-antares',
     },
   })
   console.log(registration)
@@ -169,8 +167,6 @@ const login = async () => {
         signature: buffer_to_wb64(credential.response.signature),
       },
       type: credential.type,
-      
-      username: 'den-antares',
     },
   })
 }

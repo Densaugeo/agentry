@@ -11,11 +11,8 @@ python -m libden.pk.webauthn_tool register \
     --origin localhost --user-id "den-antares" \
     > temp/curl-registration.json
 
-jq '. += { username: "den-antares" }' \
-    temp/curl-registration.json > temp/curl-registration-full.json
-
 curl -X POST -sS --fail-with-body \
     http://localhost:8000/api/register-key \
-    --json @temp/curl-registration-full.json
+    --json @temp/curl-registration.json
 
 printf '\n'

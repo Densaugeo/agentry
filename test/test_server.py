@@ -67,7 +67,6 @@ def server(request, pytestconfig):
 # Tests #
 #########
 
-import warnings
 @pytest.mark.quick
 def test_login_sunny_day(server):
     username = "den-antares"
@@ -91,7 +90,7 @@ def test_login_sunny_day(server):
     res = get('/verify', cookies={ 'token': token }, expected_status=200)
 
 def test_registration_sunny_day(server):
-    username = "den-antares"
+    username = "register-test"
     origin = "localhost"
     rp_id = "localhost"
     
@@ -212,11 +211,7 @@ private_key: pathlib.Path, origin: str) -> {}:
     assert proc.returncode == 0, 'python -m libden.pk.webauthn_tool returned ' \
         f'exit code {proc.returncode}'
     
-    res = json.loads(proc.stdout)
-    warnings.warn('The CLI tool *really* should include these keys')
-    res['username'] = username
-    
-    return res
+    return json.loads(proc.stdout)
 
 def webauthn_tool_authenticate(challenge: str, username: str,
 private_key: pathlib.Path, origin: str, credential_id: str) -> {}:
@@ -233,8 +228,4 @@ private_key: pathlib.Path, origin: str, credential_id: str) -> {}:
     assert proc.returncode == 0, 'python -m libden.pk.webauthn_tool returned ' \
         f'exit code {proc.returncode}'
     
-    res = json.loads(proc.stdout)
-    warnings.warn('The CLI tool *really* should include these keys')
-    res['username'] = username
-    
-    return res
+    return json.loads(proc.stdout)

@@ -2,7 +2,7 @@
 rpid = "localhost"
 origins = ["localhost", "http://localhost:8000"]
 
-[users."den-antares"]
+[users."test"]
 keys = [
     # scratch.pem
     { id = 'Nn20CDS45AgdiAN0b_v7SQ', public_key = 'pQECAyYgASFYIJKFV02ITvT78nDfsyL4EVOdrAQ0u_RV-9FDk9XaZ8IzIlggi-SbL2sjUBV_rNRpmCp-pksfaAUjB91_Vbu5_J6ffys' }

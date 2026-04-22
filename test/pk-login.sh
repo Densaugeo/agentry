@@ -2,7 +2,7 @@ set -eu -o pipefail
 
 curl -X POST -sS --fail-with-body \
     http://localhost:8000/api/challenge \
-    --json '{"username": "den-antares"}' \
+    --json '{"username": "test"}' \
     > temp/curl-challenge.json
 
 python -m libden.pk.webauthn_tool authenticate \

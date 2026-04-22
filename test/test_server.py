@@ -35,7 +35,7 @@ class Server:
         
         for _ in range(100):
             try:
-                get('/', port=self.port, expected_status=200, timeout=0.1)
+                get('/', port=self.port, timeout=0.1)
                 break
             except requests.exceptions.ConnectionError:
                 time.sleep(0.01)
@@ -69,40 +69,30 @@ def server(request, pytestconfig):
 
 @pytest.mark.quick
 def test_login_sunny_day(server):
-    username = "den-antares"
-    origin = "localhost"
-    rp_id = "localhost"
-    credential_id = "Nn20CDS45AgdiAN0b_v7SQ"
+    username = 'test'
+    origin = 'localhost'
+    cred_id = 'Nn20CDS45AgdiAN0b_v7SQ'
     
-    res = post('/api/challenge', json={ 'username': username },
-        expected_status=200)
-    challenge = res.json()['challenge']
-    print(f'Server sent challenge `{challenge}` for user `{username}`')
-    
+    challenge = post_api_challenge(username)
     login_payload = webauthn_tool_authenticate(challenge, username,
-        TEST_KEY_PATH, origin, credential_id)
+        TEST_KEY_PATH, origin, cred_id)
     
-    res = post('/api/login', json=login_payload, expected_status=200)
+    res = post('/api/login', json=login_payload)
     token = res.text
     assert token == res.cookies['token']
     print(f'Server authorized login with token `{token}`')
     
-    res = get('/verify', cookies={ 'token': token }, expected_status=200)
+    res = get('/verify', cookies={ 'token': token })
 
 def test_registration_sunny_day(server):
-    username = "register-test"
-    origin = "localhost"
-    rp_id = "localhost"
+    username = 'register-test'
+    origin = 'localhost'
     
-    res = post('/api/challenge', json={ 'username': username },
-        expected_status=200)
-    challenge = res.json()['challenge']
-    print(f'Server sent challenge `{challenge}` for user `{username}`')
-    
+    challenge = post_api_challenge(username)
     login_payload = webauthn_tool_register(challenge, username,
         TEST_KEY_PATH_2, origin)
     
-    res = post('/api/register-key', json=login_payload, expected_status=200)
+    res = post('/api/register-key', json=login_payload)
     res_json = res.json()
     cred_id = res_json['id']
     public_key = res_json['public_key']
@@ -117,20 +107,16 @@ def test_registration_sunny_day(server):
     server.toml = 'temp/test_registration_sunny_day.toml'
     server.start()
     
-    res = post('/api/challenge', json={ 'username': username },
-        expected_status=200)
-    challenge = res.json()['challenge']
-    print(f'Server sent challenge `{challenge}` for user `{username}`')
-    
+    challenge = post_api_challenge(username)
     login_payload = webauthn_tool_authenticate(challenge, username,
         TEST_KEY_PATH_2, origin, cred_id)
     
-    res = post('/api/login', json=login_payload, expected_status=200)
+    res = post('/api/login', json=login_payload)
     token = res.text
     assert token == res.cookies['token']
     print(f'Server authorized login with token `{token}`')
     
-    res = get('/verify', cookies={ 'token': token }, expected_status=200)
+    res = get('/verify', cookies={ 'token': token })
 
 @pytest.mark.manual
 def test_real_yubikey(server):
@@ -160,23 +146,23 @@ def test_login_curl(server):
 
 @pytest.mark.quick
 def test_server_is_running(server):
-    resp = get('/', expected_status=200)
+    resp = get('/')
 
 @pytest.mark.fixture_args(port=8001)
 def test_uvicorn_argument(server):
-    resp = get('/', port=8001, expected_status=200)
+    resp = get('/', port=8001)
 
 @pytest.mark.quick
-@pytest.mark.parametrize("run", range(10))
+@pytest.mark.parametrize('run', range(10))
 def test_stress_reuse(server, run):
-    resp = get('/', expected_status=200)
-    assert f"run {run}" == f"run {run}"  # Use run to avoid unused warning
+    resp = get('/')
+    assert f'run {run}' == f'run {run}'  # Use run to avoid unused warning
 
 ###########
 # Helpers #
 ###########
 
-def get(path: str | bytes, expected_status: int, port: int = 8000, *args,
+def get(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
 **kwargs) -> requests.Response:
     # Use 127.0.0.1 and not localhost to avoid IPv6 headaches
     res = requests.get('http://127.0.0.1:{}{}'.format(port, path),
@@ -186,7 +172,7 @@ def get(path: str | bytes, expected_status: int, port: int = 8000, *args,
     
     return res
 
-def post(path: str | bytes, expected_status: int, port: int = 8000, *args,
+def post(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
 **kwargs) -> requests.Response:
     # Use 127.0.0.1 and not localhost to avoid IPv6 headaches
     res = requests.post('http://127.0.0.1:{}{}'.format(port, path),
@@ -195,6 +181,12 @@ def post(path: str | bytes, expected_status: int, port: int = 8000, *args,
     assert res.status_code == expected_status, res.text
     
     return res
+
+def post_api_challenge(username: str, *args, **kwargs) -> str:
+    res = post('/api/challenge', json={ 'username': username }, *args, **kwargs)
+    challenge = res.json()['challenge']
+    print(f'Server sent challenge `{challenge}` for user `{username}`')
+    return challenge
 
 def webauthn_tool_register(challenge: str, username: str,
 private_key: pathlib.Path, origin: str) -> {}:
@@ -214,11 +206,11 @@ private_key: pathlib.Path, origin: str) -> {}:
     return json.loads(proc.stdout)
 
 def webauthn_tool_authenticate(challenge: str, username: str,
-private_key: pathlib.Path, origin: str, credential_id: str) -> {}:
+private_key: pathlib.Path, origin: str, cred_id: str) -> {}:
     proc = subprocess.run([sys.executable, '-m', 'libden.pk.webauthn_tool',
         'authenticate',
         '--challenge', f"'{challenge}'",
-        '--credential-id', credential_id,
+        '--credential-id', cred_id,
         '--private-key', private_key,
         '--origin', origin
     ], capture_output=True, text=True)

@@ -14,18 +14,18 @@ CHALLENGE_EXPIRATION_TIME = 5 # mins
 
 @dataclasses.dataclass
 class Config:
-    rpid: str
+    rp_id: str
     origins: [str]
 
 @dataclasses.dataclass
-class RegisteredKey:
+class Credential:
     id: str
     public_key: str
 
 @dataclasses.dataclass
 class User:
     challenges_remaining: int = MAX_USER_CHALLENGES
-    keys: list[RegisteredKey] = dataclasses.field(default_factory=list)
+    credentials: list[Credential] = dataclasses.field(default_factory=list)
 
 @dataclasses.dataclass
 class Challenge:
@@ -52,7 +52,8 @@ null_user = User(challenges_remaining=MAX_GLOBAL_CHALLENGES)
 users: dict[str, User] = {}
 if 'users' in toml:
     for user, data in toml['users'].items():
-        users[user] = User(keys=[RegisteredKey(**key) for key in data['keys']])
+        users[user] = User(credentials=[Credential(**key) for key in
+            data['credentials']])
 
 challenges: dict[bytes, Challenge] = {}
 
@@ -158,11 +159,11 @@ async def post_api_challenge(body: ChallengeBody):
     
     return fr.JSONResponse({
         'challenge': wb64_from_bytes(new_challenge),
-        'allowCredentials': [v.id for v in user.keys],
+        'allowCredentials': [v.id for v in user.credentials],
     })
 
-@app.post('/api/register-key')
-async def post_api_register_key(request: Request):
+@app.post('/api/create-credential')
+async def post_api_create_credential(request: Request):
     try:
         body = json.loads(await request.body())
     except json.decoder.JSONDecodeError:
@@ -181,7 +182,7 @@ async def post_api_register_key(request: Request):
         verified_registration = webauthn.verify_registration_response(
             credential=body,
             expected_challenge=challenge_key,
-            expected_rp_id=config.rpid,
+            expected_rp_id=config.rp_id,
             expected_origin=config.origins,
         )
     except webauthn.helpers.exceptions.InvalidRegistrationResponse as e:
@@ -211,19 +212,18 @@ async def post_api_login(request: Request):
         raise HTTPException(422, 'Unprocessable Content - Challenge not valid')
     user = users[challenges[challenge_key].username]
     
-    for key in user.keys:
+    for key in user.credentials:
         if key.id == body['rawId']:
             public_key = bytes_from_wb64(key.public_key)
             break
     else:
-        raise HTTPException(403, 'Forbidden - Key ID not found in registered '
-            'keys')
+        raise HTTPException(403, 'Forbidden - Credential ID not recognized')
     
     try:
         verified_response = webauthn.verify_authentication_response(
             credential=body,
             expected_challenge=challenge_key,
-            expected_rp_id=config.rpid,
+            expected_rp_id=config.rp_id,
             expected_origin=config.origins,
             credential_public_key=public_key,
             # Sign count is required, but doesn't seem to do anything

@@ -1,9 +1,9 @@
 [config]
-rpid = "localhost"
+rp_id = "localhost"
 origins = ["localhost", "http://localhost:8000"]
 
 [users."den-antares"]
-keys = [
+credentials = [
     # localhost - Yubkey 5 NFC
     { id = 'iEz0VA4zLJeDDQqmDsFxwyPsni1lCVAAevIEMKrruFfoVPIf1FYZJ8usYDTkjqH_tB1CpVQg71LrTChfpoAU9w', public_key = 'pQECAyYgASFYIMX4QOP5gvEQH2nuQbjQ_1OoeiZ9mTWzN8LvLaSKVFjMIlggLot-HtQvjuTuUJGOQ-3o34QzlFvP8uu7EV66bTzIFs0' },
     # localhost - Yubikey 5 NFC (Ars)

@@ -5,4 +5,4 @@ From: apptainers/python3.14.sif
 # separate image for caching
 %post
     dnf install -y nodejs
-    npm i -g opencode-ai
+    npm i -g opencode-ai@1.14.23

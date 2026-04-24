@@ -9,7 +9,7 @@
 </head>
 
 <body>
-<button id="register-key">Register new key</button>
+<button id="create-credential">Register new key</button>
 <button id="login">Login</button>
 <button id="logout">Logout</button>
 <button id="logout-all">Logout all devices</button>
@@ -59,7 +59,7 @@ window.fetch_json = async (url, options) => {
 // Auth Functions //
 ////////////////////
 
-const register_key = async () => {
+const create_credential = async () => {
   const challenge = await fetch_json('/api/challenge', {
     method: 'POST',
     json: {
@@ -91,7 +91,7 @@ const register_key = async () => {
   })
   console.log(credential)
   
-  const registration = await fetch_json('/api/register-key', {
+  const credential_2 = await fetch_json('/api/create-credential', {
     method: 'POST',
     json: {
       id: credential.id,
@@ -103,13 +103,13 @@ const register_key = async () => {
       type: credential.type,
     },
   })
-  console.log(registration)
+  console.log(credential_2)
   
   const snippet =
 `[users."den-antares"]
-keys = [  
+credentials = [  
     # ${domain}
-    { id="${registration.id}", public_key='${registration.public_key}' },
+    { id="${credential_2.id}", public_key='${credential_2.public_key}' },
 ]
 `
   
@@ -179,10 +179,10 @@ const logout_all = async () => {
   await fetch_text('/api/logout-all', { method: 'POST' })
 }
 
-document.getElementById('register-key').addEventListener('click', register_key)
-document.getElementById('login'       ).addEventListener('click', login       )
-document.getElementById('logout'      ).addEventListener('click', logout      )
-document.getElementById('logout-all'  ).addEventListener('click', logout_all  )
+document.getElementById('create-credential').addEventListener('click', create_credential)
+document.getElementById('login'     ).addEventListener('click', login     )
+document.getElementById('logout'    ).addEventListener('click', logout    )
+document.getElementById('logout-all').addEventListener('click', logout_all)
 
 login()
 </script>

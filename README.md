@@ -6,20 +6,16 @@ Testing out some agent-related stuff
 
 Auth system
 - Test stringifying `navigator.credentials.create/get()` - seems to work in Chromium now
-- Update request bodies in /api/register-key and /api/login endpoints to use pydantic templates
+- Update request bodies in /api/create-credential and /api/login endpoints to use pydantic templates
 - Break out into library
 - Set up auto tests with new CLI passkey tool (basic tests working now!)
 - Update /verify to return username (in header maybe)
+- Add username option to web page
 - Python 3.15 will support TOML 1.1, which will allow newlines and trailing
   commas inside {} in keylists
 - Postrelease test
 - Naming and such for CLI tool
 - Why do the automated tests and actual browser use require different origins?
-- Settle on some terminology
-  * There's a lot of IDs floating around. They need precise names
-  * There's a few different usernames. An ID, a display name, not sure if I will
-    use most of them but any I do use need consistent naming
-  * Standardize login/authenticate
 
 ## License
 

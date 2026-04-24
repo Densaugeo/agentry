@@ -39,7 +39,7 @@ def create_client_data_json(challenge: str, origin: str, typ: str = "webauthn.cr
     return json.dumps(client_data, separators=(',', ':'))
 
 
-def register_credential(private_key_pem: bytes, challenge: str, origin: str, user_id: str = "testuser") -> dict:
+def create_credential(private_key_pem: bytes, challenge: str, origin: str, user_id: str = "testuser") -> dict:
     """
     Generate a WebAuthn registration response.
     """
@@ -119,7 +119,7 @@ def register_credential(private_key_pem: bytes, challenge: str, origin: str, use
     }
 
 
-def authenticate_credential(private_key_pem: bytes, challenge: str, origin: str, credential_id: str) -> dict:
+def login(private_key_pem: bytes, challenge: str, origin: str, credential_id: str) -> dict:
     """
     Generate a WebAuthn authentication response.
     """
@@ -179,19 +179,19 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     
-    # Register subcommand
-    register_parser = subparsers.add_parser("register", help="Generate registration response")
-    register_parser.add_argument("--challenge", required=True, help="Base64url-encoded challenge")
-    register_parser.add_argument("--private-key", required=True, help="Path to PEM file with private key")
-    register_parser.add_argument("--origin", required=True, help="Relying Party origin (e.g., https://passkeys.io)")
-    register_parser.add_argument("--user-id", default="testuser", help="User ID (base64url)")
+    # Create Credential subcommand
+    create_credential_parser = subparsers.add_parser("create-credential", help="Generate registration response")
+    create_credential_parser.add_argument("--challenge", required=True, help="Base64url-encoded challenge")
+    create_credential_parser.add_argument("--private-key", required=True, help="Path to PEM file with private key")
+    create_credential_parser.add_argument("--origin", required=True, help="Relying Party origin (e.g., https://passkeys.io)")
+    create_credential_parser.add_argument("--user-id", default="testuser", help="User ID (base64url)")
     
-    # Authenticate subcommand
-    auth_parser = subparsers.add_parser("authenticate", help="Generate authentication response")
-    auth_parser.add_argument("--challenge", required=True, help="Base64url-encoded challenge")
-    auth_parser.add_argument("--private-key", required=True, help="Path to PEM file with private key")
-    auth_parser.add_argument("--origin", required=True, help="Relying Party origin (e.g., https://passkeys.io)")
-    auth_parser.add_argument("--credential-id", required=True, help="Base64url-encoded credential ID")
+    # Login subcommand
+    login_parser = subparsers.add_parser("login", help="Generate authentication response")
+    login_parser.add_argument("--challenge", required=True, help="Base64url-encoded challenge")
+    login_parser.add_argument("--private-key", required=True, help="Path to PEM file with private key")
+    login_parser.add_argument("--origin", required=True, help="Relying Party origin (e.g., https://passkeys.io)")
+    login_parser.add_argument("--credential-id", required=True, help="Base64url-encoded credential ID")
     
     args = parser.parse_args()
     
@@ -204,15 +204,15 @@ def main():
         sys.exit(1)
     
     # Execute command
-    if args.command == "register":
-        result = register_credential(
+    if args.command == "create-credential":
+        result = create_credential(
             private_key_pem,
             args.challenge,
             args.origin,
             args.user_id
         )
-    elif args.command == "authenticate":
-        result = authenticate_credential(
+    elif args.command == "login":
+        result = login(
             private_key_pem,
             args.challenge,
             args.origin,

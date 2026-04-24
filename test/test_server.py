@@ -70,7 +70,7 @@ def server(request, pytestconfig):
 @pytest.mark.quick
 def test_login_sunny_day(server):
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
-    login_payload = webauthn_tool_authenticate(obj['challenge'], 'test-user',
+    login_payload = webauthn_tool_login(obj['challenge'], 'test-user',
         'test-user.pem', 'localhost', 'Nn20CDS45AgdiAN0b_v7SQ')
     
     _, obj = post('/api/login', json=login_payload)
@@ -79,7 +79,7 @@ def test_login_sunny_day(server):
 @pytest.mark.quick
 def test_login_japanese(server):
     _, obj = post('/api/challenge', json={ 'username': '初音ミク' })
-    login_payload = webauthn_tool_authenticate(obj['challenge'], '初音ミク',
+    login_payload = webauthn_tool_login(obj['challenge'], '初音ミク',
         '初音ミク.pem', 'localhost', 'LEFCTt01JRE6vr9UnISq2w')
     
     _, obj = post('/api/login', json=login_payload)
@@ -88,7 +88,7 @@ def test_login_japanese(server):
 @pytest.mark.quick
 def test_login_cyrillic(server):
     _, obj = post('/api/challenge', json={ 'username': 'Слава Україні!' })
-    login_payload = webauthn_tool_authenticate(obj['challenge'],
+    login_payload = webauthn_tool_login(obj['challenge'],
         'Слава Україні!', 'Слава Україні!.pem', 'localhost',
         'P9KJ4_AJMAnlnjTrKPJVPA')
     
@@ -100,24 +100,25 @@ def test_registration_sunny_day(server):
     key_path = 'unregistered.pem'
     
     _, obj = post('/api/challenge', json={ 'username': username })
-    login_payload = webauthn_tool_register(obj['challenge'], username,
+    login_payload = webauthn_tool_create_credential(obj['challenge'], username,
         key_path, 'localhost')
     
-    _, obj = post('/api/register-key', json=login_payload)
+    _, obj = post('/api/create-credential', json=login_payload)
     cred_id = obj['id']
     public_key = obj['public_key']
     
     shutil.copy2('pkserver-empty.toml', 'temp/test_registration_sunny_day.toml')
     with open('temp/test_registration_sunny_day.toml', 'a') as f:
         f.write(f'\n[users."{username}"]\n'
-            f'keys = [{{ id = "{cred_id}", public_key = "{public_key}" }}]\n')
+            f'credentials = [{{ id = "{cred_id}",'
+            f' public_key = "{public_key}" }}]\n')
     
     server.stop()
     server.toml = 'temp/test_registration_sunny_day.toml'
     server.start()
     
     _, obj = post('/api/challenge', json={ 'username': username })
-    login_payload = webauthn_tool_authenticate(obj['challenge'], username,
+    login_payload = webauthn_tool_login(obj['challenge'], username,
         key_path, 'localhost', cred_id)
     
     _, obj = post('/api/login', json=login_payload)
@@ -126,24 +127,24 @@ def test_registration_sunny_day(server):
 @pytest.mark.manual
 def test_real_yubikey(server):
     # Must use localhost and not 127.0.0.1 so browser accepts RP ID
-    print('Open http://localhost:8000/ in Chromium and register key. '
+    print('Open http://localhost:8000/ in Chromium and begin registration. '
         'Paste data here using Ctrl+Shift+V follwed by Ctrl+D.')
     snippet = sys.stdin.readlines()
     
-    shutil.copy2('pkserver-empty.toml', 'temp/test_registration_curl.toml')
-    with open('temp/test_registration_curl.toml', 'a') as f:
+    shutil.copy2('pkserver-empty.toml', 'temp/test_real_yubikey.toml')
+    with open('temp/test_real_yubikey.toml', 'a') as f:
         f.writelines(snippet)
     
     server.stop()
-    server.toml = 'temp/test_registration_curl.toml'
+    server.toml = 'temp/test_real_yubikey.toml'
     server.start()
     
     result = input('Try logging in! Does it work y/n?\n')
     assert result == 'y'
 
 @pytest.mark.quick
-def test_register_curl(server):
-    proc = subprocess.run(['sh', 'pk-register.sh'], check=True)
+def test_create_credential_curl(server):
+    proc = subprocess.run(['sh', 'pk-create-credential.sh'], check=True)
 
 @pytest.mark.quick
 def test_login_curl(server):
@@ -195,10 +196,10 @@ def post(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
     
     return res, res.json()
 
-def webauthn_tool_register(challenge: str, username: str,
+def webauthn_tool_create_credential(challenge: str, username: str,
 private_key: pathlib.Path, origin: str) -> {}:
     proc = subprocess.run([sys.executable, '-m', 'libden.pk.webauthn_tool',
-        'register',
+        'create-credential',
         '--challenge', f"'{challenge}'",
         '--user-id', username,
         '--private-key', private_key,
@@ -212,10 +213,10 @@ private_key: pathlib.Path, origin: str) -> {}:
     
     return json.loads(proc.stdout)
 
-def webauthn_tool_authenticate(challenge: str, username: str,
+def webauthn_tool_login(challenge: str, username: str,
 private_key: pathlib.Path, origin: str, cred_id: str) -> {}:
     proc = subprocess.run([sys.executable, '-m', 'libden.pk.webauthn_tool',
-        'authenticate',
+        'login',
         '--challenge', f"'{challenge}'",
         '--credential-id', cred_id,
         '--private-key', private_key,

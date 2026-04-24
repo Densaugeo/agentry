@@ -2,8 +2,8 @@ import os, sys, time, json, pathlib, subprocess, shutil
 import pytest, requests
 
 
-TEST_KEY_PATH = pathlib.Path(__file__).parent.parent / 'passkey.pem' 
-TEST_KEY_PATH_2 = pathlib.Path(__file__).parent.parent / 'passkey-2.pem' 
+# Note regarding .pem files: All test .pem files were created using:
+# openssl ecparam -genkey -name prime256v1 -out FILENAME
 
 ####################
 # Setup / Teardown #
@@ -57,11 +57,11 @@ def server(request, pytestconfig):
         for key, value in request.keywords['fixture_args'].kwargs.items():
             server.__setattr__(key, value)
     
-    server.start()
-    
-    yield server
-    
-    server.stop()
+    try:
+        server.start()
+        yield server
+    finally:
+        server.stop()
 
 #########
 # Tests #
@@ -69,34 +69,43 @@ def server(request, pytestconfig):
 
 @pytest.mark.quick
 def test_login_sunny_day(server):
-    username = 'test'
-    origin = 'localhost'
-    cred_id = 'Nn20CDS45AgdiAN0b_v7SQ'
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    login_payload = webauthn_tool_authenticate(obj['challenge'], 'test-user',
+        'test-user.pem', 'localhost', 'Nn20CDS45AgdiAN0b_v7SQ')
     
-    challenge = post_api_challenge(username)
-    login_payload = webauthn_tool_authenticate(challenge, username,
-        TEST_KEY_PATH, origin, cred_id)
+    _, obj = post('/api/login', json=login_payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+def test_login_japanese(server):
+    _, obj = post('/api/challenge', json={ 'username': '初音ミク' })
+    login_payload = webauthn_tool_authenticate(obj['challenge'], '初音ミク',
+        '初音ミク.pem', 'localhost', 'LEFCTt01JRE6vr9UnISq2w')
     
-    res = post('/api/login', json=login_payload)
-    token = res.text
-    assert token == res.cookies['token']
-    print(f'Server authorized login with token `{token}`')
+    _, obj = post('/api/login', json=login_payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+def test_login_cyrillic(server):
+    _, obj = post('/api/challenge', json={ 'username': 'Слава Україні!' })
+    login_payload = webauthn_tool_authenticate(obj['challenge'],
+        'Слава Україні!', 'Слава Україні!.pem', 'localhost',
+        'P9KJ4_AJMAnlnjTrKPJVPA')
     
-    res = get('/verify', cookies={ 'token': token })
+    _, obj = post('/api/login', json=login_payload)
+    get('/verify', cookies={ 'token': obj['token'] })
 
 def test_registration_sunny_day(server):
     username = 'register-test'
-    origin = 'localhost'
+    key_path = 'unregistered.pem'
     
-    challenge = post_api_challenge(username)
-    login_payload = webauthn_tool_register(challenge, username,
-        TEST_KEY_PATH_2, origin)
+    _, obj = post('/api/challenge', json={ 'username': username })
+    login_payload = webauthn_tool_register(obj['challenge'], username,
+        key_path, 'localhost')
     
-    res = post('/api/register-key', json=login_payload)
-    res_json = res.json()
-    cred_id = res_json['id']
-    public_key = res_json['public_key']
-    print(f'Server authorized registration with id `{cred_id}`')
+    _, obj = post('/api/register-key', json=login_payload)
+    cred_id = obj['id']
+    public_key = obj['public_key']
     
     shutil.copy2('pkserver-empty.toml', 'temp/test_registration_sunny_day.toml')
     with open('temp/test_registration_sunny_day.toml', 'a') as f:
@@ -107,16 +116,12 @@ def test_registration_sunny_day(server):
     server.toml = 'temp/test_registration_sunny_day.toml'
     server.start()
     
-    challenge = post_api_challenge(username)
-    login_payload = webauthn_tool_authenticate(challenge, username,
-        TEST_KEY_PATH_2, origin, cred_id)
+    _, obj = post('/api/challenge', json={ 'username': username })
+    login_payload = webauthn_tool_authenticate(obj['challenge'], username,
+        key_path, 'localhost', cred_id)
     
-    res = post('/api/login', json=login_payload)
-    token = res.text
-    assert token == res.cookies['token']
-    print(f'Server authorized login with token `{token}`')
-    
-    res = get('/verify', cookies={ 'token': token })
+    _, obj = post('/api/login', json=login_payload)
+    get('/verify', cookies={ 'token': obj['token'] })
 
 @pytest.mark.manual
 def test_real_yubikey(server):
@@ -170,7 +175,12 @@ def get(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
     
     assert res.status_code == expected_status, res.text
     
-    return res
+    if path == '/' or path.startswith('/index.html'):
+        obj = res.text
+    else:
+        obj = res.json()
+    
+    return res, obj
 
 def post(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
 **kwargs) -> requests.Response:
@@ -180,13 +190,10 @@ def post(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
     
     assert res.status_code == expected_status, res.text
     
-    return res
-
-def post_api_challenge(username: str, *args, **kwargs) -> str:
-    res = post('/api/challenge', json={ 'username': username }, *args, **kwargs)
-    challenge = res.json()['challenge']
-    print(f'Server sent challenge `{challenge}` for user `{username}`')
-    return challenge
+    if path.startswith('/api/login'):
+        assert res.json()['token'] == res.cookies['token']
+    
+    return res, res.json()
 
 def webauthn_tool_register(challenge: str, username: str,
 private_key: pathlib.Path, origin: str) -> {}:

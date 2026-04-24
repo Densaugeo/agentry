@@ -12,17 +12,14 @@ Auth system
 - Update /verify to return username (in header maybe)
 - Python 3.15 will support TOML 1.1, which will allow newlines and trailing
   commas inside {} in keylists
-- Clean up tests with helpers
 - Postrelease test
 - Naming and such for CLI tool
-- Define expected origin + rpid in config file
 - Why do the automated tests and actual browser use require different origins?
 - Settle on some terminology
   * There's a lot of IDs floating around. They need precise names
   * There's a few different usernames. An ID, a display name, not sure if I will
     use most of them but any I do use need consistent naming
   * Standardize login/authenticate
-- Sort out location of .pems for testing
 
 ## License
 

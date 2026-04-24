@@ -238,7 +238,7 @@ async def post_api_login(request: Request):
     user.challenges_remaining += 1
     token = wb64_from_bytes(os.urandom(32))
     tokens.append(token)
-    res = fr.PlainTextResponse(token)
+    res = fr.JSONResponse({ 'token': token })
     res.set_cookie(key='token', value=token)
     return res
 

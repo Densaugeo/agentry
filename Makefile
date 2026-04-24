@@ -36,17 +36,17 @@ require-opencode.sif:
 
 watch: test-watch
 	while true; do \
-		make test-watch; \
 		inotifywait --recursive --event modify --exclude .kate-swp \
 			libden test; \
+		make test-watch; \
 	done
-test-watch: apptainers/opencode.sif require-opencode.sif passkey.pem passkey-2.pem
+test-watch: apptainers/opencode.sif require-opencode.sif
 	python -u -m pytest -v --tb short --server once -m quick --capture no
-test-prerelease: apptainers/opencode.sif require-opencode.sif passkey.pem passkey-2.pem
+test-prerelease: apptainers/opencode.sif require-opencode.sif
 	python -u -m pytest -v --tb short --server once -m quick
 	python -u -m pytest -v --tb short --server each -m "not manual"
 	python -u -m pytest -v --tb short --server each -m manual --capture no
-test-postrelease: apptainers/opencode.sif require-opencode.sif passkey.pem passkey-2.pem
+test-postrelease: apptainers/opencode.sif require-opencode.sif
 	python -u -m pytest -v --tb short --server each
 	python -u -m pytest -v --tb short --server once
 
@@ -78,9 +78,4 @@ apptainers/opencode.sif: apptainers/opencode-partial.sif requirements.txt
 clean:
 	rm -f apptainers/*.sif
 	rm -rf apptainers/*-tmp
-
-
-
-passkey.pem:
-passkey-2.pem:
-	openssl ecparam -genkey -name prime256v1 -out $@
+	rm -f test/temp/*

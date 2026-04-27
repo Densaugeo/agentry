@@ -1,6 +1,6 @@
 [config]
 rp_id = "localhost"
-origins = ["localhost", "http://localhost:8000"]
+origins = ["http://localhost:8000"]
 
 [users."test-user"]
 credentials = [

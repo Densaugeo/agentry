@@ -14,8 +14,7 @@ Auth system
 - Python 3.15 will support TOML 1.1, which will allow newlines and trailing
   commas inside {} in keylists
 - Postrelease test
-- Naming and such for CLI tool
-- Why do the automated tests and actual browser use require different origins?
+- Clean up client
 
 ## License
 

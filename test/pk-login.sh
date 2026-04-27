@@ -5,10 +5,12 @@ curl -X POST -sS --fail-with-body \
     --json '{"username": "test-user"}' \
     > temp/curl-challenge.json
 
-python -m libden.pk.webauthn_tool login \
+python -m libden.pk.client login \
     --challenge "$(jq '.challenge' temp/curl-challenge.json)" \
     --private-key test-user.pem \
-    --origin localhost --credential-id "Nn20CDS45AgdiAN0b_v7SQ" \
+    --rp-id localhost \
+    --origin http://localhost:8000 \
+    --credential-id "Nn20CDS45AgdiAN0b_v7SQ" \
     > temp/curl-login.json
 
 curl -X POST -sS --fail-with-body \

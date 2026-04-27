@@ -17,6 +17,11 @@ import sys
 from fido2 import cbor
 from fido2.utils import websafe_encode, websafe_decode
 
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.backends import default_backend
+
+from urllib.parse import urlparse
 
 def base64url_encode(data: bytes) -> str:
     """Encode bytes to base64url (no padding)."""
@@ -39,20 +44,10 @@ def create_client_data_json(challenge: str, origin: str, typ: str = "webauthn.cr
     return json.dumps(client_data, separators=(',', ':'))
 
 
-def create_credential(private_key_pem: bytes, challenge: str, origin: str, user_id: str = "testuser") -> dict:
+def create_credential(private_key: ec.EllipticCurvePrivateKey, challenge: str, rp_id: str, origin: str) -> dict:
     """
     Generate a WebAuthn registration response.
     """
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.hazmat.backends import default_backend
-    
-    # Parse the private key
-    private_key = serialization.load_pem_private_key(
-        private_key_pem,
-        password=None,
-        backend=default_backend()
-    )
     
     # Get the public key numbers
     public_key = private_key.public_key()
@@ -64,11 +59,6 @@ def create_credential(private_key_pem: bytes, challenge: str, origin: str, user_
     
     # Generate credential ID (for testing, use a hash of the public key)
     credential_id = hashlib.sha256(x + y).digest()[:16]
-    
-    # Extract RP ID from origin
-    from urllib.parse import urlparse
-    parsed = urlparse(origin)
-    rp_id = parsed.netloc or parsed.path
     
     # Create clientDataJSON
     client_data_json = create_client_data_json(challenge, origin, "webauthn.create")
@@ -119,30 +109,13 @@ def create_credential(private_key_pem: bytes, challenge: str, origin: str, user_
     }
 
 
-def login(private_key_pem: bytes, challenge: str, origin: str, credential_id: str) -> dict:
+def login(private_key: ec.EllipticCurvePrivateKey, challenge: str, rp_id: str, origin: str, credential_id: str) -> dict:
     """
     Generate a WebAuthn authentication response.
     """
-    from cryptography.hazmat.primitives import serialization, hashes
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.hazmat.backends import default_backend
-    
-    # Parse the private key
-    private_key = serialization.load_pem_private_key(
-        private_key_pem,
-        password=None,
-        backend=default_backend()
-    )
-    
-    # Extract RP ID from origin
-    from urllib.parse import urlparse
-    parsed = urlparse(origin)
-    rp_id = parsed.netloc or parsed.path
     
     # Decode credential ID
     cred_id = base64url_decode(credential_id)
-    # Re-encode without padding (browsers send without padding)
-    cred_id_encoded = base64url_encode(cred_id)
     
     # Create clientDataJSON
     client_data_json = create_client_data_json(challenge, origin, "webauthn.get")
@@ -161,7 +134,7 @@ def login(private_key_pem: bytes, challenge: str, origin: str, credential_id: st
     signature = private_key.sign(data_to_sign, ec.ECDSA(hashes.SHA256()))
     
     return {
-        "id": cred_id_encoded,
+        "id": credential_id,
         "rawId": credential_id,
         "response": {
             "authenticatorData": base64url_encode(authenticator_data),
@@ -180,18 +153,30 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
     
     # Create Credential subcommand
-    create_credential_parser = subparsers.add_parser("create-credential", help="Generate registration response")
-    create_credential_parser.add_argument("--challenge", required=True, help="Base64url-encoded challenge")
-    create_credential_parser.add_argument("--private-key", required=True, help="Path to PEM file with private key")
-    create_credential_parser.add_argument("--origin", required=True, help="Relying Party origin (e.g., https://passkeys.io)")
-    create_credential_parser.add_argument("--user-id", default="testuser", help="User ID (base64url)")
+    create_credential_parser = subparsers.add_parser("create-credential",
+        help="Generate registration response")
+    create_credential_parser.add_argument("--challenge", required=True,
+        help="Base64url-encoded challenge")
+    create_credential_parser.add_argument("--private-key", required=True,
+        help="Path to PEM file with private key")
+    create_credential_parser.add_argument("--rp-id", required=True,
+        help="Relying Party ID")
+    create_credential_parser.add_argument("--origin", required=True,
+        help="Relying Party origin (e.g., https://passkeys.io)")
     
     # Login subcommand
-    login_parser = subparsers.add_parser("login", help="Generate authentication response")
-    login_parser.add_argument("--challenge", required=True, help="Base64url-encoded challenge")
-    login_parser.add_argument("--private-key", required=True, help="Path to PEM file with private key")
-    login_parser.add_argument("--origin", required=True, help="Relying Party origin (e.g., https://passkeys.io)")
-    login_parser.add_argument("--credential-id", required=True, help="Base64url-encoded credential ID")
+    login_parser = subparsers.add_parser("login",
+        help="Generate authentication response")
+    login_parser.add_argument("--challenge", required=True,
+        help="Base64url-encoded challenge")
+    login_parser.add_argument("--credential-id", required=True,
+        help="Base64url-encoded credential ID")
+    login_parser.add_argument("--private-key", required=True,
+        help="Path to PEM file with private key")
+    login_parser.add_argument("--rp-id", required=True,
+        help="Relying Party ID")
+    login_parser.add_argument("--origin", required=True,
+        help="Relying Party origin (e.g., https://passkeys.io)")
     
     args = parser.parse_args()
     
@@ -203,18 +188,29 @@ def main():
         print(f"Error: Private key file not found: {args.private_key}", file=sys.stderr)
         sys.exit(1)
     
+    # Parse the private key
+    private_key = serialization.load_pem_private_key(
+        private_key_pem,
+        password=None,
+        backend=default_backend()
+    )
+    assert isinstance(private_key, ec.EllipticCurvePrivateKey), f'Private key' \
+        f' key {args.private_key} is of type {type(private_key)}, but only' \
+        f' elliptic curve keys are currently supported.'
+    
     # Execute command
     if args.command == "create-credential":
         result = create_credential(
-            private_key_pem,
+            private_key,
             args.challenge,
+            args.rp_id,
             args.origin,
-            args.user_id
         )
     elif args.command == "login":
         result = login(
-            private_key_pem,
+            private_key,
             args.challenge,
+            args.rp_id,
             args.origin,
             args.credential_id
         )

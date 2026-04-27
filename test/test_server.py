@@ -70,8 +70,8 @@ def server(request, pytestconfig):
 @pytest.mark.quick
 def test_login_sunny_day(server):
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
-    login_payload = webauthn_tool_login(obj['challenge'], 'test-user',
-        'test-user.pem', 'localhost', 'Nn20CDS45AgdiAN0b_v7SQ')
+    login_payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
     
     _, obj = post('/api/login', json=login_payload)
     get('/verify', cookies={ 'token': obj['token'] })
@@ -79,8 +79,8 @@ def test_login_sunny_day(server):
 @pytest.mark.quick
 def test_login_japanese(server):
     _, obj = post('/api/challenge', json={ 'username': '初音ミク' })
-    login_payload = webauthn_tool_login(obj['challenge'], '初音ミク',
-        '初音ミク.pem', 'localhost', 'LEFCTt01JRE6vr9UnISq2w')
+    login_payload = pk_client_login(obj['challenge'], '初音ミク.pem',
+        'localhost', 'http://localhost:8000', 'LEFCTt01JRE6vr9UnISq2w')
     
     _, obj = post('/api/login', json=login_payload)
     get('/verify', cookies={ 'token': obj['token'] })
@@ -88,9 +88,8 @@ def test_login_japanese(server):
 @pytest.mark.quick
 def test_login_cyrillic(server):
     _, obj = post('/api/challenge', json={ 'username': 'Слава Україні!' })
-    login_payload = webauthn_tool_login(obj['challenge'],
-        'Слава Україні!', 'Слава Україні!.pem', 'localhost',
-        'P9KJ4_AJMAnlnjTrKPJVPA')
+    login_payload = pk_client_login(obj['challenge'], 'Слава Україні!.pem',
+        'localhost', 'http://localhost:8000', 'P9KJ4_AJMAnlnjTrKPJVPA')
     
     _, obj = post('/api/login', json=login_payload)
     get('/verify', cookies={ 'token': obj['token'] })
@@ -100,8 +99,8 @@ def test_registration_sunny_day(server):
     key_path = 'unregistered.pem'
     
     _, obj = post('/api/challenge', json={ 'username': username })
-    login_payload = webauthn_tool_create_credential(obj['challenge'], username,
-        key_path, 'localhost')
+    login_payload = pk_client_create_credential(obj['challenge'], key_path,
+        'localhost', 'http://localhost:8000')
     
     _, obj = post('/api/create-credential', json=login_payload)
     cred_id = obj['id']
@@ -118,8 +117,8 @@ def test_registration_sunny_day(server):
     server.start()
     
     _, obj = post('/api/challenge', json={ 'username': username })
-    login_payload = webauthn_tool_login(obj['challenge'], username,
-        key_path, 'localhost', cred_id)
+    login_payload = pk_client_login(obj['challenge'], key_path,
+        'localhost', 'http://localhost:8000', cred_id)
     
     _, obj = post('/api/login', json=login_payload)
     get('/verify', cookies={ 'token': obj['token'] })
@@ -196,36 +195,37 @@ def post(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
     
     return res, res.json()
 
-def webauthn_tool_create_credential(challenge: str, username: str,
-private_key: pathlib.Path, origin: str) -> {}:
-    proc = subprocess.run([sys.executable, '-m', 'libden.pk.webauthn_tool',
+def pk_client_create_credential(challenge: str,
+private_key: pathlib.Path, rp_id: str, origin: str) -> {}:
+    proc = subprocess.run([sys.executable, '-m', 'libden.pk.client',
         'create-credential',
         '--challenge', f"'{challenge}'",
-        '--user-id', username,
         '--private-key', private_key,
+        '--rp-id', rp_id,
         '--origin', origin
     ], capture_output=True, text=True)
     
-    print('python -m libden.pk.webauthn_tool returned exit code '
+    print('python -m libden.pk.client returned exit code '
         f'{proc.returncode}')
-    assert proc.returncode == 0, 'python -m libden.pk.webauthn_tool returned ' \
+    assert proc.returncode == 0, 'python -m libden.pk.client returned ' \
         f'exit code {proc.returncode}'
     
     return json.loads(proc.stdout)
 
-def webauthn_tool_login(challenge: str, username: str,
-private_key: pathlib.Path, origin: str, cred_id: str) -> {}:
-    proc = subprocess.run([sys.executable, '-m', 'libden.pk.webauthn_tool',
+def pk_client_login(challenge: str,
+private_key: pathlib.Path, rp_id: str, origin: str, cred_id: str) -> {}:
+    proc = subprocess.run([sys.executable, '-m', 'libden.pk.client',
         'login',
         '--challenge', f"'{challenge}'",
         '--credential-id', cred_id,
         '--private-key', private_key,
+        '--rp-id', rp_id,
         '--origin', origin
     ], capture_output=True, text=True)
     
-    print('python -m libden.pk.webauthn_tool returned exit code '
+    print('python -m libden.pk.client returned exit code '
         f'{proc.returncode}')
-    assert proc.returncode == 0, 'python -m libden.pk.webauthn_tool returned ' \
+    assert proc.returncode == 0, 'python -m libden.pk.client returned ' \
         f'exit code {proc.returncode}'
     
     return json.loads(proc.stdout)

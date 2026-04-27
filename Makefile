@@ -1,5 +1,3 @@
-.PHONY: webauthn-test
-
 RESET=\x1b[0m
 BOLD=\x1b[1m
 AQUA=\x1b[38;2;26;186;151m
@@ -49,9 +47,6 @@ test-prerelease: apptainers/opencode.sif require-opencode.sif
 test-postrelease: apptainers/opencode.sif require-opencode.sif
 	python -u -m pytest -v --tb short --server each
 	python -u -m pytest -v --tb short --server once
-
-webauthn-test:
-	python -m uvicorn webauthn-test.app-fastapi:app --use-colors --reload
 
 dev-pk: apptainers/opencode.sif
 	apptainer exec --env PKSERVER_TOML=/repo/test/pkserver.toml \

@@ -7,15 +7,19 @@ from fastapi import FastAPI, HTTPException, Request, Cookie, Header
 import fastapi.responses as fr
 import webauthn
 
-MAX_GLOBAL_CHALLENGES = 10
-MAX_USER_CHALLENGES = 3
-LOGIN_ATTEMPT_RECOVERY_TIME = 60 # mins
-CHALLENGE_EXPIRATION_TIME = 5 # mins
-
 @dataclasses.dataclass
 class Config:
     rp_id: str
     origins: [str]
+    max_global_challenges: int = 10
+    max_user_challenges: int = 3
+    login_attempt_recovery_time: int = 60 # mins
+    challenge_expiration_time: int = 5 # mins
+
+with open(os.environ['PKSERVER_TOML'], 'rb') as f:
+    toml = tomllib.load(f)
+
+config = Config(**toml['config'])
 
 @dataclasses.dataclass
 class Credential:
@@ -24,13 +28,13 @@ class Credential:
 
 @dataclasses.dataclass
 class User:
-    challenges_remaining: int = MAX_USER_CHALLENGES
+    challenges_remaining: int = config.max_user_challenges
     credentials: list[Credential] = dataclasses.field(default_factory=list)
 
 @dataclasses.dataclass
 class Challenge:
     username: str | None = None
-    mins_remaining: int = CHALLENGE_EXPIRATION_TIME
+    mins_remaining: int = config.challenge_expiration_time
 
 #################
 # General Setup #
@@ -42,12 +46,7 @@ logger = logging.getLogger('uvicorn')
 
 app = FastAPI()
 
-with open(os.environ['PKSERVER_TOML'], 'rb') as f:
-    toml = tomllib.load(f)
-
-config = Config(**toml['config'])
-
-null_user = User(challenges_remaining=MAX_GLOBAL_CHALLENGES)
+null_user = User(challenges_remaining=config.max_global_challenges)
 
 users: dict[str, User] = {}
 if 'users' in toml:
@@ -121,14 +120,14 @@ def tick_challenges():
         challenge.mins_remaining -= 1
 
 @app.on_event('startup')
-@fastapi_utils.tasks.repeat_every(seconds=60*LOGIN_ATTEMPT_RECOVERY_TIME,
+@fastapi_utils.tasks.repeat_every(seconds=60*config.login_attempt_recovery_time,
     raise_exceptions=True)
 def tick_users():
-    if null_user.challenges_remaining < MAX_GLOBAL_CHALLENGES:
+    if null_user.challenges_remaining < config.max_global_challenges:
         null_user.challenges_remaining += 1
     
     for user in users.values():
-        if user.challenges_remaining < MAX_USER_CHALLENGES:
+        if user.challenges_remaining < config.max_user_challenges:
             user.challenges_remaining += 1
 
 #############
@@ -162,12 +161,23 @@ async def post_api_challenge(body: ChallengeBody):
         'allowCredentials': [v.id for v in user.credentials],
     })
 
+class CreateCredentialBodyResponse(pydantic.BaseModel):
+    attestationObject: str
+    clientDataJSON: str
+
+class CreateCredentialBody(pydantic.BaseModel):
+    id: str
+    rawId: str
+    response: CreateCredentialBodyResponse
+    type: str
+
 @app.post('/api/create-credential')
-async def post_api_create_credential(request: Request):
+async def post_api_create_credential(request: Request,
+body: CreateCredentialBody):
     try:
         body = json.loads(await request.body())
     except json.decoder.JSONDecodeError:
-        raise HTTPException(400, 'Bad Request - Invalid JSON')
+        raise HTTPException(422, 'Unprocessable Content - Invalid JSON')
     
     challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
         body['response']['clientDataJSON']))['challenge'])
@@ -198,22 +208,28 @@ async def post_api_create_credential(request: Request):
             wb64_from_bytes(verified_registration.credential_public_key),
     })
 
+class LoginBodyResponse(pydantic.BaseModel):
+    authenticatorData: str
+    clientDataJSON: str
+    signature: str
+
+class LoginBody(pydantic.BaseModel):
+    id: str
+    rawId: str
+    response: LoginBodyResponse
+    type: str
+
 @app.post('/api/login')
-async def post_api_login(request: Request):
-    try:
-        body = json.loads(await request.body())
-    except json.decoder.JSONDecodeError:
-        raise HTTPException(400, 'Bad Request - Invalid JSON')
-    
+async def post_api_login(request: Request, body: LoginBody):
     challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
-        body['response']['clientDataJSON']))['challenge'])
+        body.response.clientDataJSON))['challenge'])
     if challenge_key not in challenges \
     or challenges[challenge_key].username is None:
         raise HTTPException(422, 'Unprocessable Content - Challenge not valid')
     user = users[challenges[challenge_key].username]
     
     for key in user.credentials:
-        if key.id == body['rawId']:
+        if key.id == body.rawId:
             public_key = bytes_from_wb64(key.public_key)
             break
     else:
@@ -221,7 +237,7 @@ async def post_api_login(request: Request):
     
     try:
         verified_response = webauthn.verify_authentication_response(
-            credential=body,
+            credential=json.loads(await request.body()),
             expected_challenge=challenge_key,
             expected_rp_id=config.rp_id,
             expected_origin=config.origins,

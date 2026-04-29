@@ -1,0 +1,22 @@
+[config]
+rp_id = "localhost"
+origins = ["http://localhost:8000"]
+# For when the test suite is run with the "once" option, raise max challenges
+# so the entire test suite can be run without restarting
+max_global_challenges = 1000
+max_user_challenges = 1000
+
+[users."test-user"]
+credentials = [
+    { id = "Nn20CDS45AgdiAN0b_v7SQ", public_key = "pQECAyYgASFYIJKFV02ITvT78nDfsyL4EVOdrAQ0u_RV-9FDk9XaZ8IzIlggi-SbL2sjUBV_rNRpmCp-pksfaAUjB91_Vbu5_J6ffys" }
+]
+
+[users."初音ミク"]
+credentials = [
+    { id = "LEFCTt01JRE6vr9UnISq2w", public_key = "pQECAyYgASFYIPYQEFdwFFZXfOXPYnJ2MOY3Q1MBZAi0r-44cKMdK_-DIlggIDBRhSbatPgGiD9XRrz2G6JMV4qUJ3Sh31nmZ2Flysw" }
+]
+
+[users."Слава Україні!"]
+credentials = [
+    { id = "P9KJ4_AJMAnlnjTrKPJVPA", public_key = "pQECAyYgASFYIG0-HWDVmn_m9XW5rTBcIWWzR4-V9jeCxi7-ow_5Y6MvIlggPkLWRk-psWV5nXGE8zJI--o85wUt9zZdchEPGEgm6ng" }
+]

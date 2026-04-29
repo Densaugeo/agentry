@@ -50,12 +50,15 @@ class Server:
         assert self.proc.returncode == 0
 
 @pytest.fixture(scope=_get_server_scope)
-def server(request, pytestconfig):
+def server(request):
     server = Server()
+    
+    if request.scope == 'module':
+        server.toml = 'pkserver-test-once.toml'
     
     if 'fixture_args' in request.keywords:
         for key, value in request.keywords['fixture_args'].kwargs.items():
-            server.__setattr__(key, value)
+            setattr(server, key, value)
     
     try:
         server.start()
@@ -66,6 +69,10 @@ def server(request, pytestconfig):
 #########
 # Tests #
 #########
+
+@pytest.mark.quick
+def test_server_is_running(server):
+    resp = get('/')
 
 @pytest.mark.quick
 def test_login_sunny_day(server):
@@ -93,6 +100,58 @@ def test_login_cyrillic(server):
     
     _, obj = post('/api/login', json=login_payload)
     get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+@pytest.mark.parametrize('endpoint', [
+    '/api/challenge',
+    '/api/login',
+    '/api/create-credential',
+])
+def test_malformed_json(server, endpoint: str):
+    post(endpoint, data='{', expected_status=422)
+
+@pytest.mark.quick
+@pytest.mark.parametrize('missing', [
+    'id',
+    'rawId',
+    'response',
+    'response.authenticatorData',
+    'response.clientDataJSON',
+    'response.signature',
+])
+def test_login_missing_fields(server, missing: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', obj['allowCredentials'][0])
+    
+    if '.' in missing:
+        key_1, key_2 = missing.split('.')
+        del payload[key_1][key_2]
+    else:
+        del payload[missing]
+    
+    post('/api/login', json=payload, expected_status=422)
+
+@pytest.mark.quick
+@pytest.mark.parametrize('missing', [
+    'id',
+    'rawId',
+    'response',
+    'response.attestationObject',
+    'response.clientDataJSON',
+])
+def test_create_credential_missing_fields(server, missing: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_create_credential(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000')
+    
+    if '.' in missing:
+        key_1, key_2 = missing.split('.')
+        del payload[key_1][key_2]
+    else:
+        del payload[missing]
+    
+    post('/api/create-credential', json=payload, expected_status=422)
 
 def test_registration_sunny_day(server):
     username = 'register-test'
@@ -127,7 +186,7 @@ def test_registration_sunny_day(server):
 def test_real_yubikey(server):
     # Must use localhost and not 127.0.0.1 so browser accepts RP ID
     print('Open http://localhost:8000/ in Chromium and begin registration. '
-        'Paste data here using Ctrl+Shift+V follwed by Ctrl+D.')
+        'Paste data here using Ctrl+Shift+V followed by Ctrl+D.')
     snippet = sys.stdin.readlines()
     
     shutil.copy2('pkserver-empty.toml', 'temp/test_real_yubikey.toml')
@@ -149,19 +208,9 @@ def test_create_credential_curl(server):
 def test_login_curl(server):
     proc = subprocess.run(['sh', 'pk-login.sh'], check=True)
 
-@pytest.mark.quick
-def test_server_is_running(server):
-    resp = get('/')
-
 @pytest.mark.fixture_args(port=8001)
 def test_uvicorn_argument(server):
     resp = get('/', port=8001)
-
-@pytest.mark.quick
-@pytest.mark.parametrize('run', range(10))
-def test_stress_reuse(server, run):
-    resp = get('/')
-    assert f'run {run}' == f'run {run}'  # Use run to avoid unused warning
 
 ###########
 # Helpers #
@@ -170,7 +219,7 @@ def test_stress_reuse(server, run):
 def get(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
 **kwargs) -> requests.Response:
     # Use 127.0.0.1 and not localhost to avoid IPv6 headaches
-    res = requests.get('http://127.0.0.1:{}{}'.format(port, path),
+    res = requests.get(f'http://127.0.0.1:{port}{path}',
         verify=False, *args, **kwargs)
     
     assert res.status_code == expected_status, res.text
@@ -185,12 +234,12 @@ def get(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
 def post(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
 **kwargs) -> requests.Response:
     # Use 127.0.0.1 and not localhost to avoid IPv6 headaches
-    res = requests.post('http://127.0.0.1:{}{}'.format(port, path),
+    res = requests.post(f'http://127.0.0.1:{port}{path}',
         verify=False, *args, **kwargs)
     
     assert res.status_code == expected_status, res.text
     
-    if path.startswith('/api/login'):
+    if path.startswith('/api/login') and expected_status == 200:
         assert res.json()['token'] == res.cookies['token']
     
     return res, res.json()

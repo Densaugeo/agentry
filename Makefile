@@ -10,9 +10,9 @@ install:
 	sudo chgrp agents apptainers
 	sudo chmod 2775 apptainers
 	
-	sudo chgrp agents -R local-share-opencode
-	sudo find local-share-opencode -type d -exec chmod 2775 {} +
-	sudo find local-share-opencode -type f -exec chmod 664 {} +
+	sudo chgrp agents -R apptainers/local-share-opencode
+	sudo find apptainers/local-share-opencode -type d -exec chmod 2775 {} +
+	sudo find apptainers/local-share-opencode -type f -exec chmod 664 {} +
 
 opencode: apptainers/opencode.sif
 	@printf '\n$(ORANGE)Session history is broken again but session can be '
@@ -23,7 +23,7 @@ opencode: apptainers/opencode.sif
 	@# it
 	sudo -u agents apptainer shell --containall \
 		--bind .:/repo:rw \
-		--bind local-share-opencode:/home/agents/.local/share/opencode:rw \
+		--bind apptainers/local-share-opencode:/home/agents/.local/share/opencode:rw \
 		--cwd /home/agents apptainers/opencode.sif
 
 require-opencode.sif:

@@ -15,6 +15,8 @@ Auth system
   commas inside {} in keylists
 - Postrelease test
 - Clean up client
+- Rename repo
+- Packaging
 
 ## License
 

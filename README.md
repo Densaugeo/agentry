@@ -6,7 +6,6 @@ Testing out some agent-related stuff
 
 Auth system
 - Test stringifying `navigator.credentials.create/get()` - seems to work in Chromium now
-- Update request bodies in /api/create-credential and /api/login endpoints to use pydantic templates
 - Break out into library
 - Set up auto tests with new CLI passkey tool (basic tests working now!)
 - Update /verify to return username (in header maybe)

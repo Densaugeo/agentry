@@ -16,8 +16,6 @@ Auth system
 - Clean up client
 - Rename repo
 - Packaging
-- Move wb64_from_bytes and bytes_from_wb64 into helpers file. Maybe pydantic
-  template too
 
 ## License
 

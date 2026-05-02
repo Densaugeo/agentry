@@ -7,6 +7,9 @@ from fastapi import FastAPI, HTTPException, Request, Cookie, Header
 import fastapi.responses as fr
 import webauthn
 
+from .helpers import wb64_from_bytes, bytes_from_wb64
+
+
 @dataclasses.dataclass
 class Config:
     rp_id: str
@@ -73,18 +76,6 @@ error_template = '''<!DOCTYPE html>
 {message}
 </body>
 </html>'''
-
-def wb64_from_bytes(bytes_: bytes) -> str:
-    '''
-    Encode bytes to URL-safe base 64 with no padding, as in WebAuthn spec
-    '''
-    return str(base64.urlsafe_b64encode(bytes_).replace(b'=', b''), 'ascii')
-
-def bytes_from_wb64(b64: str) -> bytes:
-    '''
-    Decode bytes from URL-safe base 64 with no padding, as in WebAuthn spec
-    '''
-    return base64.urlsafe_b64decode(b64 + '==')
 
 # FastAPI docs advise intercepting the Starlette HTTP exception, not the FastAPI
 # one

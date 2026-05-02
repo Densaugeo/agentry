@@ -1,5 +1,8 @@
 import os, sys, time, json, pathlib, subprocess, shutil
+
 import pytest, requests
+
+from libden.pk.helpers import wb64_from_bytes
 
 
 # Note regarding .pem files: All test .pem files were created using:
@@ -104,7 +107,7 @@ def test_login_cyrillic(server):
 @pytest.mark.quick
 def test_cc_sunny_day(server):
     _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
-    payload = pk_client_create_credential(obj['challenge'], 'unregistered.pem',
+    payload = pk_client_cc(obj['challenge'], 'unregistered.pem',
         'localhost', 'http://localhost:8000')
     
     _, obj = post('/api/create-credential', json=payload)
@@ -136,7 +139,7 @@ def test_challenge_missing_field(server):
 ])
 def test_cc_missing_field(server, field: str):
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
-    payload = pk_client_create_credential(obj['challenge'], 'test-user.pem',
+    payload = pk_client_cc(obj['challenge'], 'test-user.pem',
         'localhost', 'http://localhost:8000')
     
     if '.' in field:
@@ -195,7 +198,7 @@ def test_challenge_bad_field(server, value: str):
 def test_cc_bad_field(server, field: str, value: str,
 expected_status: int):
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
-    payload = pk_client_create_credential(obj['challenge'], 'test-user.pem',
+    payload = pk_client_cc(obj['challenge'], 'test-user.pem',
         'localhost', 'http://localhost:8000')
     
     if '.' in field:
@@ -244,8 +247,8 @@ expected_status: int):
 
 @pytest.mark.quick
 def test_cc_no_challenge(server):
-    payload = pk_client_create_credential(wb64_from_bytes(os.urandom(16)),
-        'unregistered.pem', 'localhost', 'http://localhost:8000')
+    payload = pk_client_cc(wb64_from_bytes(os.urandom(16)), 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
     
     post('/api/create-credential', json=payload, expected_status=422)
 
@@ -305,7 +308,7 @@ def test_registration_sunny_day(server):
     key_path = 'unregistered.pem'
     
     _, obj = post('/api/challenge', json={ 'username': username })
-    login_payload = pk_client_create_credential(obj['challenge'], key_path,
+    login_payload = pk_client_cc(obj['challenge'], key_path,
         'localhost', 'http://localhost:8000')
     
     _, obj = post('/api/create-credential', json=login_payload)
@@ -391,8 +394,8 @@ def post(path: str | bytes, port: int = 8000, expected_status: int = 200, *args,
     
     return res, res.json()
 
-def pk_client_create_credential(challenge: str,
-private_key: pathlib.Path, rp_id: str, origin: str) -> {}:
+def pk_client_cc(challenge: str, private_key: pathlib.Path, rp_id: str,
+origin: str) -> {}:
     proc = subprocess.run([sys.executable, '-m', 'libden.pk.client',
         'create-credential',
         '--challenge', f"'{challenge}'",
@@ -408,8 +411,8 @@ private_key: pathlib.Path, rp_id: str, origin: str) -> {}:
     
     return json.loads(proc.stdout)
 
-def pk_client_login(challenge: str,
-private_key: pathlib.Path, rp_id: str, origin: str, cred_id: str) -> {}:
+def pk_client_login(challenge: str, private_key: pathlib.Path, rp_id: str,
+origin: str, cred_id: str) -> {}:
     proc = subprocess.run([sys.executable, '-m', 'libden.pk.client',
         'login',
         '--challenge', f"'{challenge}'",
@@ -425,16 +428,3 @@ private_key: pathlib.Path, rp_id: str, origin: str, cred_id: str) -> {}:
         f'exit code {proc.returncode}'
     
     return json.loads(proc.stdout)
-
-import base64
-def wb64_from_bytes(bytes_: bytes) -> str:
-    '''
-    Encode bytes to URL-safe base 64 with no padding, as in WebAuthn spec
-    '''
-    return str(base64.urlsafe_b64encode(bytes_).replace(b'=', b''), 'ascii')
-
-def bytes_from_wb64(b64: str) -> bytes:
-    '''
-    Decode bytes from URL-safe base 64 with no padding, as in WebAuthn spec
-    '''
-    return base64.urlsafe_b64decode(b64 + '==')

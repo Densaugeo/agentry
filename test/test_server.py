@@ -426,18 +426,6 @@ private_key: pathlib.Path, rp_id: str, origin: str, cred_id: str) -> {}:
     
     return json.loads(proc.stdout)
 
-def complete_login_payload(server, username):
-    """Create a complete valid login payload."""
-    _, obj = post('/api/challenge', json={ 'username': username })
-    return pk_client_login(obj['challenge'], f'{username}.pem',
-        'localhost', 'http://localhost:8000', obj['allowCredentials'][0])
-
-def load_config():
-    """Load server config from TOML file."""
-    import toml
-    with open('pkserver-test.toml', 'rb') as f:
-        return toml.load(f)
-
 import base64
 def wb64_from_bytes(bytes_: bytes) -> str:
     '''

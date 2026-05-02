@@ -39,7 +39,7 @@ watch: test-watch
 		make test-watch; \
 	done
 test-watch: apptainers/opencode.sif require-opencode.sif
-	python -u -m pytest -v --tb short --server once -m quick --capture no
+	python -u -m pytest -v --tb short --server once -m quick
 test-prerelease: apptainers/opencode.sif require-opencode.sif
 	python -u -m pytest -v --tb short --server once -m quick
 	python -u -m pytest -v --tb short --server each -m "not manual"

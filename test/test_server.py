@@ -77,29 +77,39 @@ def test_server_is_running(server):
 @pytest.mark.quick
 def test_login_sunny_day(server):
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
-    login_payload = pk_client_login(obj['challenge'], 'test-user.pem',
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
         'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
     
-    _, obj = post('/api/login', json=login_payload)
+    _, obj = post('/api/login', json=payload)
     get('/verify', cookies={ 'token': obj['token'] })
 
 @pytest.mark.quick
 def test_login_japanese(server):
     _, obj = post('/api/challenge', json={ 'username': '初音ミク' })
-    login_payload = pk_client_login(obj['challenge'], '初音ミク.pem',
+    payload = pk_client_login(obj['challenge'], '初音ミク.pem',
         'localhost', 'http://localhost:8000', 'LEFCTt01JRE6vr9UnISq2w')
     
-    _, obj = post('/api/login', json=login_payload)
+    _, obj = post('/api/login', json=payload)
     get('/verify', cookies={ 'token': obj['token'] })
 
 @pytest.mark.quick
 def test_login_cyrillic(server):
     _, obj = post('/api/challenge', json={ 'username': 'Слава Україні!' })
-    login_payload = pk_client_login(obj['challenge'], 'Слава Україні!.pem',
+    payload = pk_client_login(obj['challenge'], 'Слава Україні!.pem',
         'localhost', 'http://localhost:8000', 'P9KJ4_AJMAnlnjTrKPJVPA')
     
-    _, obj = post('/api/login', json=login_payload)
+    _, obj = post('/api/login', json=payload)
     get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+def test_cc_sunny_day(server):
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
+    payload = pk_client_create_credential(obj['challenge'], 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    _, obj = post('/api/create-credential', json=payload)
+    assert 'id' in obj
+    assert 'public_key' in obj
 
 @pytest.mark.quick
 @pytest.mark.parametrize('endpoint', [
@@ -111,7 +121,34 @@ def test_malformed_json(server, endpoint: str):
     post(endpoint, data='{', expected_status=422)
 
 @pytest.mark.quick
-@pytest.mark.parametrize('missing', [
+def test_challenge_missing_field(server):
+    # There's only one expected field, so use an empty JSON for the missing
+    # field test
+    post('/api/challenge', json={}, expected_status=422)
+
+@pytest.mark.quick
+@pytest.mark.parametrize('field', [
+    'id',
+    'rawId',
+    'response',
+    'response.attestationObject',
+    'response.clientDataJSON',
+])
+def test_cc_missing_field(server, field: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_create_credential(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000')
+    
+    if '.' in field:
+        key_1, key_2 = field.split('.')
+        del payload[key_1][key_2]
+    else:
+        del payload[field]
+    
+    post('/api/create-credential', json=payload, expected_status=422)
+
+@pytest.mark.quick
+@pytest.mark.parametrize('field', [
     'id',
     'rawId',
     'response',
@@ -119,39 +156,149 @@ def test_malformed_json(server, endpoint: str):
     'response.clientDataJSON',
     'response.signature',
 ])
-def test_login_missing_fields(server, missing: str):
+def test_login_missing_field(server, field: str):
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
     payload = pk_client_login(obj['challenge'], 'test-user.pem',
         'localhost', 'http://localhost:8000', obj['allowCredentials'][0])
     
-    if '.' in missing:
-        key_1, key_2 = missing.split('.')
+    if '.' in field:
+        key_1, key_2 = field.split('.')
         del payload[key_1][key_2]
     else:
-        del payload[missing]
+        del payload[field]
     
     post('/api/login', json=payload, expected_status=422)
 
 @pytest.mark.quick
-@pytest.mark.parametrize('missing', [
-    'id',
-    'rawId',
-    'response',
-    'response.attestationObject',
-    'response.clientDataJSON',
+@pytest.mark.parametrize('value', [
+    '',
+    17*'a',
 ])
-def test_create_credential_missing_fields(server, missing: str):
+def test_challenge_bad_field(server, value: str):
+    # There's only one field to test
+    post('/api/challenge', json={ 'username': value }, expected_status=422)
+
+@pytest.mark.quick
+@pytest.mark.parametrize('field,value,expected_status', [
+    pytest.param('id', 'notarealid', 401, id='id'),
+    pytest.param('rawId', 'notarealid', 401, id='rawId'),
+    pytest.param('response', 'not-even-json', 422, id='response'),
+    pytest.param('response.attestationObject', 'multipleoffourplusone', 422,
+        id='attestationObject-bad-base64'),
+    pytest.param('response.attestationObject', 'base64butnotjson', 422,
+        id='attestationObject-bad-json'),
+    pytest.param('response.clientDataJSON', 'multipleoffourplusone', 422,
+        id='clientDataJSON-bad-base64'),
+    pytest.param('response.clientDataJSON', 'base64butnotjson', 422,
+        id='clientDataJSON-bad-json'),
+])
+def test_cc_bad_field(server, field: str, value: str,
+expected_status: int):
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
     payload = pk_client_create_credential(obj['challenge'], 'test-user.pem',
         'localhost', 'http://localhost:8000')
     
-    if '.' in missing:
-        key_1, key_2 = missing.split('.')
-        del payload[key_1][key_2]
+    if '.' in field:
+        key_1, key_2 = field.split('.')
+        payload[key_1][key_2] = value
     else:
-        del payload[missing]
+        payload[field] = value
+    
+    post('/api/create-credential', json=payload,
+        expected_status=expected_status)
+
+@pytest.mark.quick
+@pytest.mark.parametrize('field,value,expected_status', [
+    pytest.param('id', 'notarealid', 401, id='id'),
+    pytest.param('rawId', 'notarealid', 401, id='rawId'),
+    pytest.param('response', 'not-even-json', 422, id='response'),
+    pytest.param('response.authenticatorData', 'multipleoffourplusone', 422,
+        id='authenticatorData-bad-base64'),
+    pytest.param('response.authenticatorData', 'base64butshort', 422,
+        id='authenticatorData-short'),
+    pytest.param('response.authenticatorData',
+        'looooooooooooooooooooooooooooooooongenoughbutnotjson', 422,
+        id='authenticatorData-bad-json'),
+    pytest.param('response.clientDataJSON', 'multipleoffourplusone', 422,
+        id='clientDataJSON-bad-base6'),
+    pytest.param('response.clientDataJSON', 'base64butnotjson', 422,
+        id='clientDataJSON-bad-json'),
+    pytest.param('response.signature', 'multipleoffourplusone', 422,
+        id='signature-bad-base64'),
+    pytest.param('response.signature', 'badsignature', 401,
+        id='signature-bad-json'),
+])
+def test_login_bad_field(server, field: str, value: str,
+expected_status: int):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', obj['allowCredentials'][0])
+    
+    if '.' in field:
+        key_1, key_2 = field.split('.')
+        payload[key_1][key_2] = value
+    else:
+        payload[field] = value
+    
+    post('/api/login', json=payload, expected_status=expected_status)
+
+@pytest.mark.quick
+def test_cc_no_challenge(server):
+    payload = pk_client_create_credential(wb64_from_bytes(os.urandom(16)),
+        'unregistered.pem', 'localhost', 'http://localhost:8000')
     
     post('/api/create-credential', json=payload, expected_status=422)
+
+@pytest.mark.quick
+def test_login_no_challenge(server):
+    payload = pk_client_login(wb64_from_bytes(os.urandom(16)), 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    post('/api/login', json=payload, expected_status=422)
+
+# CC w/ wrong challenge
+# Login w/ wrong challenge
+# CC w/ reused challenge
+# Login w/ reused challenge
+# CC w/ double challenge                           <--- Sunny day
+# Login w/ double challenge                        <--- Sunny day
+# CC w/ expired challenge
+# Login w/ expired challenge
+# CC w/ almost expired challenge                   <--- Sunny day
+# Login w/ almost expired challenge                <--- Sunny day
+# Challenge w/ too many challenges (global)
+# Challenge w/ too many challenges (per user)
+# Challenge w/ almost too many challenges (global) <--- Sunny day
+# Challenge w/ almost too many challenges (per user)<-- Sunny day
+# Login w/ too many challenges on separate user    <--- Sunny day
+# CC with recovered challenge                      <--- Sunny day
+# Login with recovered challenge                   <--- Sunny day
+# Simultaneous CC                                  <--- Sunny day
+# Simultaneous login                               <--- Sunny day
+
+# Logout sunny day
+# Logout w/o cookie
+# Logout w/ missing cookie fields
+# Logout w/ malformed cookie
+# Logout w/ malformed cookie fields
+# Logout w/ bad token
+# Logout different token
+
+# Logout all sunny day single token
+# Logout all w/o cookie
+# Logout all w/ missing cookie fields
+# Logout all w/ malformed cookie
+# Logout all w/ malformed cookie fields
+# Logout all w/ bad token
+# Logout all sunny day multiple tokens
+
+# Verify sunny day
+# Verify w/o cookie
+# Verify w/ missing cookie fields
+# Verify w/ malformed cookie
+# Verify w/ malformed cookie fields
+# Verify w/ bad token
+# Verify sunny day multiple tokens
 
 def test_registration_sunny_day(server):
     username = 'register-test'
@@ -278,3 +425,28 @@ private_key: pathlib.Path, rp_id: str, origin: str, cred_id: str) -> {}:
         f'exit code {proc.returncode}'
     
     return json.loads(proc.stdout)
+
+def complete_login_payload(server, username):
+    """Create a complete valid login payload."""
+    _, obj = post('/api/challenge', json={ 'username': username })
+    return pk_client_login(obj['challenge'], f'{username}.pem',
+        'localhost', 'http://localhost:8000', obj['allowCredentials'][0])
+
+def load_config():
+    """Load server config from TOML file."""
+    import toml
+    with open('pkserver-test.toml', 'rb') as f:
+        return toml.load(f)
+
+import base64
+def wb64_from_bytes(bytes_: bytes) -> str:
+    '''
+    Encode bytes to URL-safe base 64 with no padding, as in WebAuthn spec
+    '''
+    return str(base64.urlsafe_b64encode(bytes_).replace(b'=', b''), 'ascii')
+
+def bytes_from_wb64(b64: str) -> bytes:
+    '''
+    Decode bytes from URL-safe base 64 with no padding, as in WebAuthn spec
+    '''
+    return base64.urlsafe_b64decode(b64 + '==')

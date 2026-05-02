@@ -140,7 +140,8 @@ async def static_index_html():
     return fr.FileResponse(path=pathlib.Path(__file__).parent / 'index.html')
 
 class ChallengeBody(pydantic.BaseModel):
-    username: Annotated[str, pydantic.StringConstraints(max_length=16)]
+    username: Annotated[str, pydantic.StringConstraints(min_length=1,
+        max_length=16)]
 
 @app.post('/api/challenge')
 async def post_api_challenge(body: ChallengeBody):
@@ -175,12 +176,11 @@ class CreateCredentialBody(pydantic.BaseModel):
 async def post_api_create_credential(request: Request,
 body: CreateCredentialBody):
     try:
-        body = json.loads(await request.body())
-    except json.decoder.JSONDecodeError:
-        raise HTTPException(422, 'Unprocessable Content - Invalid JSON')
+        challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
+            body.response.clientDataJSON))['challenge'])
+    except Exception as e:
+        raise HTTPException(422, f'Unprocessable Content - {e}')
     
-    challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
-        body['response']['clientDataJSON']))['challenge'])
     if challenge_key not in challenges:
         raise HTTPException(422, 'Unprocessable Content - Challenge not valid')
     if challenges[challenge_key].username is None:
@@ -189,14 +189,22 @@ body: CreateCredentialBody):
         user = users[challenges[challenge_key].username]
     
     try:
+        credential = webauthn.helpers.parse_registration_credential_json(
+            json.loads(await request.body()))
+    except Exception as e:
+        raise HTTPException(422, f'Unprocessable Content - {e}')
+    
+    try:
         verified_registration = webauthn.verify_registration_response(
-            credential=body,
+            credential=credential,
             expected_challenge=challenge_key,
             expected_rp_id=config.rp_id,
             expected_origin=config.origins,
         )
     except webauthn.helpers.exceptions.InvalidRegistrationResponse as e:
         raise HTTPException(401, f'Unauthorized - {e}')
+    except Exception as e:
+        raise HTTPException(422, f'Unprocessable Content - {e}')
     finally:
         challenges.pop(challenge_key)
     
@@ -221,8 +229,12 @@ class LoginBody(pydantic.BaseModel):
 
 @app.post('/api/login')
 async def post_api_login(request: Request, body: LoginBody):
-    challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
-        body.response.clientDataJSON))['challenge'])
+    try:
+        challenge_key = bytes_from_wb64(json.loads(bytes_from_wb64(
+            body.response.clientDataJSON))['challenge'])
+    except Exception as e:
+        raise HTTPException(422, f'Unprocessable Content - {e}')
+    
     if challenge_key not in challenges \
     or challenges[challenge_key].username is None:
         raise HTTPException(422, 'Unprocessable Content - Challenge not valid')
@@ -233,11 +245,17 @@ async def post_api_login(request: Request, body: LoginBody):
             public_key = bytes_from_wb64(key.public_key)
             break
     else:
-        raise HTTPException(403, 'Forbidden - Credential ID not recognized')
+        raise HTTPException(401, 'Unauthorized - Credential ID not recognized')
+    
+    try:
+        credential = webauthn.helpers.parse_authentication_credential_json(
+            json.loads(await request.body()))
+    except Exception as e:
+        raise HTTPException(422, f'Unprocessable Content - {e}')
     
     try:
         verified_response = webauthn.verify_authentication_response(
-            credential=json.loads(await request.body()),
+            credential=credential,
             expected_challenge=challenge_key,
             expected_rp_id=config.rp_id,
             expected_origin=config.origins,
@@ -248,6 +266,8 @@ async def post_api_login(request: Request, body: LoginBody):
         )
     except webauthn.helpers.exceptions.InvalidAuthenticationResponse as e:
         raise HTTPException(401, f'Unauthorized - {e}')
+    except Exception as e:
+        raise HTTPException(422, f'Unprocessable Content - {e}')
     finally:
         challenges.pop(challenge_key)
     

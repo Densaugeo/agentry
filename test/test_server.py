@@ -259,12 +259,71 @@ def test_login_no_challenge(server):
     
     post('/api/login', json=payload, expected_status=422)
 
-# CC w/ wrong challenge
-# Login w/ wrong challenge
-# CC w/ reused challenge
-# Login w/ reused challenge
-# CC w/ double challenge                           <--- Sunny day
-# Login w/ double challenge                        <--- Sunny day
+@pytest.mark.quick
+def test_cc_wrong_challenge(server):
+    post('/api/challenge', json={ 'username': 'cc-test' })
+    payload = pk_client_cc(wb64_from_bytes(os.urandom(16)), 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    post('/api/create-credential', json=payload, expected_status=422)
+
+@pytest.mark.quick
+def test_login_wrong_challenge(server):
+    post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(wb64_from_bytes(os.urandom(16)), 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    post('/api/login', json=payload, expected_status=422)
+
+@pytest.mark.quick
+def test_cc_reused_challenge(server):
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
+    payload = pk_client_cc(obj['challenge'], 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    post('/api/create-credential', json=payload)
+    
+    payload = pk_client_cc(obj['challenge'], 'unregistered-2.pem',
+        'localhost', 'http://localhost:8000')
+    
+    post('/api/create-credential', json=payload, expected_status=422)
+
+@pytest.mark.quick
+def test_login_reused_challenge(server):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    post('/api/login', json=payload)
+    
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    post('/api/login', json=payload, expected_status=422)
+
+@pytest.mark.quick
+def test_cc_double_challenge(server):
+    post('/api/challenge', json={ 'username': 'cc-test' })
+    
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
+    payload = pk_client_cc(obj['challenge'], 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    _, obj = post('/api/create-credential', json=payload)
+    assert 'id' in obj
+    assert 'public_key' in obj
+
+@pytest.mark.quick
+def test_login_double_challenge(server):
+    post('/api/challenge', json={ 'username': 'test-user' })
+    
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+
 # CC w/ expired challenge
 # Login w/ expired challenge
 # CC w/ almost expired challenge                   <--- Sunny day

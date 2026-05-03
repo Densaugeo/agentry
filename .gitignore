@@ -1,4 +1,6 @@
 __pycache__
-local-share-opencode
-test/temp
+/apptainers/local-share-opencode/*
+!/apptainers/local-share-opencode/.gitkeep
+/test/temp/*
+!/test/temp/.gitkeep
 *.sif

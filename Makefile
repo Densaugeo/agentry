@@ -1,5 +1,6 @@
 RESET=\x1b[0m
 BOLD=\x1b[1m
+BLUE=\x1b[38;2;68;170;221m
 AQUA=\x1b[38;2;26;186;151m
 ORANGE=\x1b[38;2;236;182;74m
 
@@ -7,14 +8,10 @@ install:
 	id agents || sudo useradd agents
 	sudo usermod --append --groups agents $$USER
 	
-	sudo chgrp agents apptainers
-	sudo chmod 2775 apptainers
-	
-	sudo chgrp agents -R apptainers/local-share-opencode
-	sudo find apptainers/local-share-opencode -type d -exec chmod 2775 {} +
-	sudo find apptainers/local-share-opencode -type f -exec chmod 664 {} +
+	sudo chgrp agents apptainers/local-share-opencode test/temp
+	sudo chmod 2775 apptainers/local-share-opencode test/temp
 
-opencode: apptainers/opencode.sif
+opencode: apptainers/opencode.sif apptainers/local-share-opencode
 	@printf '\n$(ORANGE)Session history is broken again but session can be '
 	@printf 'resumed with $(BOLD)$(AQUA)opencode -s '
 	@printf 'ses_32b993f44ffeGpsiFilybTLCfH$(RESET)\n\n'
@@ -28,8 +25,10 @@ opencode: apptainers/opencode.sif
 
 require-opencode.sif:
 	@if [[ $$APPTAINER_CONTAINER != */opencode.sif ]]; then \
-		printf '\n!!!! Must be run inside opencode.sif !!!!\n\n' ;\
-		false ;\
+		printf '\n$(ORANGE)!!!! Must be run inside '; \
+		printf '${BOLD}${BLUE}opencode.sif${RESET}${ORANGE} !!!!'; \
+		printf '${RESET}\n\n'; \
+		false; \
 	fi
 
 watch: test-watch
@@ -59,7 +58,8 @@ dev-pk: apptainers/opencode.sif
 apptainers/%.sif: TMP = apptainers/$*-tmp
 apptainers/%.sif: apptainers/%.Definitionfile
 	mkdir -p $(TMP)
-	sudo chown agents $(TMP)
+	sudo chgrp agents $(TMP)
+	sudo chmod 2775 $(TMP)
 	sudo -u agents apptainer build $(TMP)/image.sif $<
 	sudo mv $(TMP)/image.sif $@
 	sudo chown $$USER:$$USER $@

@@ -16,8 +16,9 @@ class Config:
     origins: [str]
     max_global_challenges: int = 10
     max_user_challenges: int = 3
-    login_attempt_recovery_time: int = 60 # mins
-    challenge_expiration_time: int = 5 # mins
+    login_attempt_recovery_time_s: int = 3600
+    challenge_expiration_time_s: int = 300
+    tick_time_s: int = 60
 
 with open(os.environ['PKSERVER_TOML'], 'rb') as f:
     toml = tomllib.load(f)
@@ -37,7 +38,7 @@ class User:
 @dataclasses.dataclass
 class Challenge:
     username: str | None = None
-    mins_remaining: int = config.challenge_expiration_time
+    time_remaining_s: int = config.challenge_expiration_time_s
 
 #################
 # General Setup #
@@ -99,19 +100,20 @@ err: starlette.exceptions.HTTPException):
     return await fastapi.exception_handlers.http_exception_handler(request, err)
 
 @app.on_event('startup')
-@fastapi_utils.tasks.repeat_every(seconds=60, raise_exceptions=True)
+@fastapi_utils.tasks.repeat_every(seconds=config.tick_time_s,
+    raise_exceptions=True)
 def tick_challenges():
     # Iterate over a copy of challenges.keys(), because keys will be removed
     # during iteration
     for key in list(challenges.keys()):
-        if challenges[key].mins_remaining == 0:
+        if challenges[key].time_remaining_s <= 0:
             challenges.pop(key)
     
     for challenge in challenges.values():
-        challenge.mins_remaining -= 1
+        challenge.time_remaining_s -= config.tick_time_s
 
 @app.on_event('startup')
-@fastapi_utils.tasks.repeat_every(seconds=60*config.login_attempt_recovery_time,
+@fastapi_utils.tasks.repeat_every(seconds=config.login_attempt_recovery_time_s,
     raise_exceptions=True)
 def tick_users():
     if null_user.challenges_remaining < config.max_global_challenges:

@@ -324,10 +324,49 @@ def test_login_double_challenge(server):
     _, obj = post('/api/login', json=payload)
     get('/verify', cookies={ 'token': obj['token'] })
 
-# CC w/ expired challenge
-# Login w/ expired challenge
-# CC w/ almost expired challenge                   <--- Sunny day
-# Login w/ almost expired challenge                <--- Sunny day
+@pytest.mark.fixture_args(toml='pkserver-test-timing.toml')
+def test_cc_challenge_expiration(server):
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
+    payload = pk_client_cc(obj['challenge'], 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
+    payload_2 = pk_client_cc(obj['challenge'], 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    print('Waiting 1 s (not long enough to expire)...')
+    time.sleep(1)
+    
+    _, obj = post('/api/create-credential', json=payload)
+    assert 'id' in obj
+    assert 'public_key' in obj
+    
+    print('Waiting 2 s (should expire)...')
+    time.sleep(2)
+    
+    post('/api/login', json=payload_2, expected_status=422)
+
+@pytest.mark.fixture_args(toml='pkserver-test-timing.toml')
+def test_login_challenge_expiration(server):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload_2 = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    print('Waiting 1 s (not long enough to expire)...')
+    time.sleep(1)
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+    
+    print('Waiting 2 s (should expire)...')
+    time.sleep(2)
+    
+    post('/api/create-credential', json=payload_2, expected_status=422)
+
 # Challenge w/ too many challenges (global)
 # Challenge w/ too many challenges (per user)
 # Challenge w/ almost too many challenges (global) <--- Sunny day

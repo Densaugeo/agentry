@@ -1,0 +1,13 @@
+[config]
+rp_id = "localhost"
+origins = ["http://localhost:8000"]
+max_global_challenges = 10
+max_user_challenges = 3
+login_attempt_recovery_time_s = 2
+challenge_expiration_time_s = 2
+tick_time_s = 1
+
+[users."test-user"]
+credentials = [
+    { id = 'Nn20CDS45AgdiAN0b_v7SQ', public_key = 'pQECAyYgASFYIJKFV02ITvT78nDfsyL4EVOdrAQ0u_RV-9FDk9XaZ8IzIlggi-SbL2sjUBV_rNRpmCp-pksfaAUjB91_Vbu5_J6ffys' }
+]

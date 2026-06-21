@@ -7,7 +7,7 @@ Testing out some agent-related stuff
 Auth system
 - Test stringifying `navigator.credentials.create/get()` - seems to work in Chromium now
 - Break out into library
-- Set up auto tests with new CLI passkey tool (basic tests working now!)
+- Change /api/logout-all to only affect logins from same user?
 - Update /verify to return username (in header maybe)
 - Add username option to web page
 - Python 3.15 will support TOML 1.1, which will allow newlines and trailing

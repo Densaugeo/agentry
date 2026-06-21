@@ -326,6 +326,10 @@ def test_login_double_challenge(server):
 
 @pytest.mark.fixture_args(toml='pkserver-test-timing.toml')
 def test_cc_challenge_expiration(server):
+    '''
+    The challenge expiration tests combine expired and unexpired cases to
+    consolidate test time
+    '''
     _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
     payload = pk_client_cc(obj['challenge'], 'unregistered.pem',
         'localhost', 'http://localhost:8000')
@@ -348,6 +352,10 @@ def test_cc_challenge_expiration(server):
 
 @pytest.mark.fixture_args(toml='pkserver-test-timing.toml')
 def test_login_challenge_expiration(server):
+    '''
+    The challenge expiration tests combine expired and unexpired cases to
+    consolidate test time
+    '''
     _, obj = post('/api/challenge', json={ 'username': 'test-user' })
     payload = pk_client_login(obj['challenge'], 'test-user.pem',
         'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
@@ -367,39 +375,252 @@ def test_login_challenge_expiration(server):
     
     post('/api/create-credential', json=payload_2, expected_status=422)
 
-# Challenge w/ too many challenges (global)
-# Challenge w/ too many challenges (per user)
-# Challenge w/ almost too many challenges (global) <--- Sunny day
-# Challenge w/ almost too many challenges (per user)<-- Sunny day
-# Login w/ too many challenges on separate user    <--- Sunny day
-# CC with recovered challenge                      <--- Sunny day
-# Login with recovered challenge                   <--- Sunny day
-# Simultaneous CC                                  <--- Sunny day
-# Simultaneous login                               <--- Sunny day
+@pytest.mark.fixture_args(toml='pkserver-test-timing.toml')
+def test_cc_challenge_recovery(server):
+    '''
+    The challenge recovery tests combine unexhausted, exhausted, and recovered
+    cases to consolidate test time
+    '''
+    # Burn challenges from the global pool until only one remains
+    for _ in range(9):
+        post('/api/challenge', json={ 'username': 'cc-test' })
+    
+    # Last remaining challenge
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
+    payload = pk_client_cc(obj['challenge'], 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    # Verify global challenge pool is exhausted
+    post('/api/challenge', json={ 'username': 'cc-test' }, expected_status=429)
+    
+    # Complete registration with last challenge
+    _, obj = post('/api/create-credential', json=payload)
+    assert 'id' in obj
+    assert 'public_key' in obj
+    
+    # Verify completed registration recovers exactly one challenge
+    post('/api/challenge', json={ 'username': 'cc-test' })
+    post('/api/challenge', json={ 'username': 'cc-test' }, expected_status=429)
+    
+    print('Waiting 2 s for challenge recovery...')
+    time.sleep(2)
+    
+    # Verify 1 s wait recovers exactly one challenge
+    post('/api/challenge', json={ 'username': 'cc-test' })
+    post('/api/challenge', json={ 'username': 'cc-test' }, expected_status=429)
 
-# Logout sunny day
-# Logout w/o cookie
-# Logout w/ missing cookie fields
-# Logout w/ malformed cookie
-# Logout w/ malformed cookie fields
-# Logout w/ bad token
-# Logout different token
+@pytest.mark.fixture_args(toml='pkserver-test-timing.toml')
+def test_login_challenge_recovery(server):
+    '''
+    The challenge recovery tests combine unexhausted, exhausted, and recovered
+    cases to consolidate test time
+    '''
+    # Burn challenges from the user's pool until only one remains
+    for _ in range(2):
+        post('/api/challenge', json={ 'username': 'test-user' })
+    
+    # Last remaining challenge
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    # Verify user's challenge pool is exhausted
+    post('/api/challenge', json={'username': 'test-user'}, expected_status=429)
+    
+    # Complete login with last challenge
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+    
+    # Verify completed login recovers exactly one challenge
+    post('/api/challenge', json={ 'username': 'test-user' })
+    post('/api/challenge', json={ 'username': 'test-user' }, expected_status=429)
+    
+    print('Waiting 2 s for challenge recovery...')
+    time.sleep(2)
+    
+    # Verify 1 s wait recovers exactly one challenge
+    post('/api/challenge', json={ 'username': 'test-user' })
+    post('/api/challenge', json={ 'username': 'test-user' }, expected_status=429)
 
-# Logout all sunny day single token
-# Logout all w/o cookie
-# Logout all w/ missing cookie fields
-# Logout all w/ malformed cookie
-# Logout all w/ malformed cookie fields
-# Logout all w/ bad token
-# Logout all sunny day multiple tokens
+@pytest.mark.fixture_args(toml='pkserver-test-timing.toml')
+def test_login_user_challenge_pools(server):
+    # Exhaust other user's challenge pool
+    for _ in range(3):
+        post('/api/challenge', json={ 'username': 'Слава Україні!' })
+    post('/api/challenge', json={ 'username': 'Слава Україні!' },
+        expected_status=429)
+    
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
 
-# Verify sunny day
-# Verify w/o cookie
-# Verify w/ missing cookie fields
-# Verify w/ malformed cookie
-# Verify w/ malformed cookie fields
-# Verify w/ bad token
-# Verify sunny day multiple tokens
+@pytest.mark.quick
+def test_simultaneous_cc(server):
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test' })
+    payload = pk_client_cc(obj['challenge'], 'unregistered.pem',
+        'localhost', 'http://localhost:8000')
+    
+    _, obj = post('/api/challenge', json={ 'username': 'cc-test-2' })
+    payload_2 = pk_client_cc(obj['challenge'], 'unregistered-2.pem',
+        'localhost', 'http://localhost:8000')
+    
+    _, obj = post('/api/create-credential', json=payload)
+    assert 'id' in obj
+    assert 'public_key' in obj
+    
+    _, obj = post('/api/create-credential', json=payload_2)
+    assert 'id' in obj
+    assert 'public_key' in obj
+
+@pytest.mark.quick
+def test_simultaneous_login(server):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/challenge', json={ 'username': 'Слава Україні!' })
+    payload_2 = pk_client_login(obj['challenge'], 'Слава Україні!.pem',
+        'localhost', 'http://localhost:8000', 'P9KJ4_AJMAnlnjTrKPJVPA')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+    
+    _, obj = post('/api/login', json=payload_2)
+    get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+@pytest.mark.parametrize('endpoint', [
+    '/api/logout',
+    '/api/logout-all',
+])
+def test_logout_sunny_day(server, endpoint: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+    
+    post(endpoint, cookies={ 'token': obj['token'] })
+    get('/verify', cookies={ 'token': obj['token'] }, expected_status=403)
+
+@pytest.mark.quick
+@pytest.mark.parametrize('endpoint', [
+    '/api/logout',
+    '/api/logout-all',
+])
+def test_logout_no_cookie(server, endpoint: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+    
+    post(endpoint, expected_status=401)
+    get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+@pytest.mark.parametrize('endpoint', [
+    '/api/logout',
+    '/api/logout-all',
+])
+def test_logout_no_token(server, endpoint: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+    
+    post(endpoint, cookies={ 'other-field': 'foo' }, expected_status=401)
+    get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+@pytest.mark.parametrize('endpoint', [
+    '/api/logout',
+    '/api/logout-all',
+])
+def test_logout_bad_token(server, endpoint: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'] })
+    
+    post(endpoint, cookies={ 'token': obj['token'][:-1] },
+        expected_status=403)
+    get('/verify', cookies={ 'token': obj['token'] })
+
+@pytest.mark.quick
+@pytest.mark.parametrize('endpoint', [
+    '/api/logout',
+    '/api/logout-all',
+])
+def test_logout_multiple(server, endpoint: str):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    token_1 = obj['token']
+    
+    _, obj = post('/api/challenge', json={ 'username': 'Слава Україні!' })
+    payload = pk_client_login(obj['challenge'], 'Слава Україні!.pem',
+        'localhost', 'http://localhost:8000', 'P9KJ4_AJMAnlnjTrKPJVPA')
+    
+    _, obj = post('/api/login', json=payload)
+    token_2 = obj['token']
+    
+    get('/verify', cookies={ 'token': token_1 })
+    get('/verify', cookies={ 'token': token_2 })
+    
+    post(endpoint, cookies={ 'token': token_1 })
+    
+    get('/verify', cookies={ 'token': token_1 }, expected_status=403)
+    get('/verify', cookies={ 'token': token_2 },
+        expected_status=403 if endpoint == '/api/logout-all' else 200)
+
+@pytest.mark.quick
+def test_verify_sunny_day():
+    # Covered by test_login_sunny_day()
+    pass
+
+@pytest.mark.quick
+def test_verify_no_cookie(server):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', expected_status=401)
+
+@pytest.mark.quick
+def test_verify_no_token(server):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'other-field': 'foo' }, expected_status=401)
+
+@pytest.mark.quick
+def test_verify_bad_token(server):
+    _, obj = post('/api/challenge', json={ 'username': 'test-user' })
+    payload = pk_client_login(obj['challenge'], 'test-user.pem',
+        'localhost', 'http://localhost:8000', 'Nn20CDS45AgdiAN0b_v7SQ')
+    
+    _, obj = post('/api/login', json=payload)
+    get('/verify', cookies={ 'token': obj['token'][:-1] }, expected_status=403)
+
+@pytest.mark.quick
+def test_verify_multiple():
+    # Covered by test_simultaneous_login()
+    pass
 
 def test_registration_sunny_day(server):
     username = 'register-test'
@@ -449,7 +670,7 @@ def test_real_yubikey(server):
     assert result == 'y'
 
 @pytest.mark.quick
-def test_create_credential_curl(server):
+def test_cc_curl(server):
     proc = subprocess.run(['sh', 'pk-create-credential.sh'], check=True)
 
 @pytest.mark.quick
